@@ -24,11 +24,20 @@ function App() {
   const [invoiceNo, setInvoiceNo] = useState("000000001");
   const [customerName, setCustomerName] = useState("kim chung");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number } | null>(null);
+  const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem("app_zoom");
+    return saved ? Number(saved) : 100;
+  });
+  const [tempZoom, setTempZoom] = useState(zoom);
 
   // Inventory State
   const [inventorySearch, setInventorySearch] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const appContainerRef = useRef<HTMLDivElement>(null);
 
   // Resize State for middle section
   const [middleHeight, setMiddleHeight] = useState(300);
@@ -52,7 +61,9 @@ function App() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
       const delta = e.clientY - dragStartY.current;
-      setMiddleHeight(Math.max(150, Math.min(dragStartHeight.current + delta, window.innerHeight * 0.75)));
+      const zFactor = zoom / 100;
+      const maxH = (window.innerHeight / zFactor) * 0.75;
+      setMiddleHeight(Math.max(150, Math.min(dragStartHeight.current + delta, maxH)));
     };
 
     const handleMouseUp = () => {
@@ -75,11 +86,16 @@ function App() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isDragging]);
+  }, [isDragging, zoom]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (editingProduct || isSystemModalOpen) {
+          setEditingProduct(null);
+          setIsSystemModalOpen(false);
+          return;
+        }
         const now = Date.now();
         if (now - lastEscPress.current < 500) {
           setPosSearch("");
@@ -100,19 +116,69 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCartIndex]);
+  }, [selectedCartIndex, editingProduct, isSystemModalOpen]);
 
   useEffect(() => {
     // Tạm thời nạp dữ liệu mẫu
     setProducts(initialProducts);
   }, []);
 
-  const getCartTotal = () => {
+  useEffect(() => {
+    if (editingProduct) {
+      setEditForm({
+        sku: editingProduct.sku,
+        name: editingProduct.name,
+        unit: editingProduct.unit,
+        price: editingProduct.price,
+      });
+    } else {
+      setEditForm(null);
+    }
+  }, [editingProduct]);
+
+  useEffect(() => {
+    document.documentElement.style.zoom = '100%';
+    const appEl = appContainerRef.current;
+    if (appEl) {
+      const zFactor = zoom / 100;
+      appEl.style.zoom = zFactor.toString();
+      appEl.style.width = `calc(100vw / ${zFactor})`;
+      appEl.style.height = `calc(100vh / ${zFactor})`;
+    }
+    localStorage.setItem("app_zoom", zoom.toString());
+  }, [zoom]);
+
+  useEffect(() => {
+    if (isSystemModalOpen) {
+      setTempZoom(zoom);
+    }
+  }, [isSystemModalOpen, zoom]);
+
+  useEffect(() => {
+    if (editingProduct || isSystemModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [editingProduct, isSystemModalOpen]);
+
+  const getCartBaseTotal = () => {
+    return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  };
+
+  const getCartDiscountTotal = () => {
     return cart.reduce((sum, item) => {
       const amount = item.product.price * item.quantity;
       const discount = item.discount || 0;
-      return sum + amount * (1 - discount / 100);
+      return sum + amount * (discount / 100);
     }, 0);
+  };
+
+  const getCartFinalTotal = () => {
+    return getCartBaseTotal() - getCartDiscountTotal();
   };
 
   const addToCart = (p: Product) => {
@@ -138,6 +204,28 @@ function App() {
     }
   };
 
+  const handleSaveProductEdit = () => {
+    if (!editingProduct || !editForm) return;
+
+    setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...editForm } : p));
+
+    if (selectedProduct && selectedProduct.id === editingProduct.id) {
+      setSelectedProduct(prev => prev ? { ...prev, ...editForm } : null);
+    }
+
+    setCart(prev => prev.map(item => {
+      if (item.product.id === editingProduct.id) {
+        return {
+          ...item,
+          product: { ...item.product, ...editForm }
+        };
+      }
+      return item;
+    }));
+
+    setEditingProduct(null);
+  };
+
   const updateCartItem = (index: number, field: 'quantity' | 'price' | 'discount', value: number) => {
     if (field === 'quantity' && value <= 0) {
       setCart(prev => prev.filter((_, i) => i !== index));
@@ -160,14 +248,13 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div ref={appContainerRef} className="app-container">
       {/* Menu Bar */}
       <div className="menu-bar">
-        <div className="menu-item">Hệ thống</div>
         <div className="menu-item" onClick={() => setActiveTab("pos")} style={{ fontWeight: activeTab === 'pos' ? 'bold' : 'normal' }}>Bán Hàng</div>
-        <div className="menu-item">Thu Chi</div>
-        <div className="menu-item" onClick={() => setActiveTab("inventory")} style={{ fontWeight: activeTab === 'inventory' ? 'bold' : 'normal' }}>Danh mục</div>
-        <div className="menu-item">Trợ Giúp</div>
+        <div className="menu-item" onClick={() => setActiveTab("inventory")} style={{ fontWeight: activeTab === 'inventory' ? 'bold' : 'normal' }}>Sản phẩm</div>
+        <div style={{ flex: 1 }}></div>
+        <div className="menu-item" onClick={() => setIsSystemModalOpen(true)}>Hệ thống</div>
       </div>
 
       <div className="main-content">
@@ -187,43 +274,43 @@ function App() {
             </div>
 
             {/* Top Section: Invoice Info */}
-            <div className="pos-top-section" style={{ display: 'flex', gap: '8px', padding: '6px' }}>
-              <fieldset className="classic-fieldset" style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div className="pos-top-section" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '1.5 1 220px', minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <legend>Thông tin phiếu</legend>
                 <div className="form-row">
                   <span className="form-label-fixed">Số HĐ:</span>
-                  <input className="classic-input" value={invoiceNo} readOnly style={{ flex: 1 }} />
+                  <input className="classic-input" value={invoiceNo} readOnly style={{ flex: 1, minWidth: 0 }} />
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Thời gian:</span>
-                  <input className="classic-input" value="20/03/2026" readOnly style={{ width: '80px' }} />
-                  <input className="classic-input" value="09:45" readOnly style={{ width: '50px' }} />
+                  <input className="classic-input" value="20/03/2026" readOnly style={{ width: '80px', minWidth: 0 }} />
+                  <input className="classic-input" value="09:45" readOnly style={{ width: '50px', minWidth: 0 }} />
                 </div>
               </fieldset>
 
-              <fieldset className="classic-fieldset" style={{ flex: 3.5, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '3.5 1 350px', minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <legend>Khách hàng & Ghi chú</legend>
                 <div className="form-row">
                   <span className="form-label-fixed">Khách hàng:</span>
-                  <input className="classic-input" value={customerName} onChange={e => setCustomerName(e.target.value)} style={{ flex: 1 }} />
+                  <input className="classic-input" value={customerName} onChange={e => setCustomerName(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
                   <span className="form-label-fixed" style={{ minWidth: '45px' }}>Đối tác:</span>
-                  <input className="classic-input" value="Không có" readOnly style={{ width: '120px' }} />
+                  <input className="classic-input" value="Không có" readOnly style={{ width: '120px', minWidth: 0 }} />
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Ghi chú:</span>
-                  <input className="classic-input" style={{ flex: 1 }} />
+                  <input className="classic-input" style={{ flex: 1, minWidth: 0 }} />
                 </div>
               </fieldset>
 
-              <fieldset className="classic-fieldset" style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '2 1 180px', minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <legend>Khuyến mãi hóa đơn</legend>
                 <div className="form-row">
                   <span className="form-label-fixed">Giảm (%):</span>
-                  <input className="classic-input" value="0" style={{ width: '50px', textAlign: 'right' }} />
+                  <input className="classic-input" value="0" style={{ width: '50px', textAlign: 'right', minWidth: 0 }} />
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Giảm tiền:</span>
-                  <input className="classic-input" value="0" style={{ flex: 1, textAlign: 'right' }} />
+                  <input className="classic-input" value="0" style={{ flex: 1, textAlign: 'right', minWidth: 0 }} />
                   <span style={{ fontSize: '11px', marginLeft: '2px' }}>đ</span>
                 </div>
               </fieldset>
@@ -237,13 +324,14 @@ function App() {
                     <thead>
                       <tr>
                         <th style={{ width: '10%' }}>Mã Hàng</th>
-                        <th style={{ width: '25%' }}>Tên M.Hàng</th>
+                        <th style={{ width: '22%' }}>Tên M.Hàng</th>
                         <th style={{ width: '5%' }}>ĐVT</th>
-                        <th style={{ width: '8%' }}>S.Lg</th>
-                        <th style={{ width: '12%' }}>Đơn Giá</th>
-                        <th style={{ width: '12%' }}>Cộng</th>
-                        <th style={{ width: '8%' }}>Km%</th>
-                        <th style={{ width: '15%' }}>Thành Tiền</th>
+                        <th style={{ width: '7%' }}>S.Lg</th>
+                        <th style={{ width: '11%' }}>Đơn Giá</th>
+                        <th style={{ width: '11%' }}>Cộng</th>
+                        <th style={{ width: '6%' }}>Km%</th>
+                        <th style={{ width: '11%' }}>Tiền Giảm</th>
+                        <th style={{ width: '12%' }}>Thành Tiền</th>
                         <th style={{ width: '5%' }}>Xóa</th>
                       </tr>
                     </thead>
@@ -251,7 +339,8 @@ function App() {
                       {cart.map((item, idx) => {
                         const amount = item.product.price * item.quantity;
                         const discount = item.discount || 0;
-                        const finalAmount = amount * (1 - discount / 100);
+                        const discountAmount = amount * (discount / 100);
+                        const finalAmount = amount - discountAmount;
 
                         return (
                           <tr
@@ -305,6 +394,7 @@ function App() {
                                 }}
                               />
                             </td>
+                            <td className="text-right grid-readonly-cell" style={{ color: 'var(--text-red)' }}>{formatVND(discountAmount)}</td>
                             <td className="text-right grid-readonly-cell">{formatVND(finalAmount)}</td>
                             <td className="text-center grid-readonly-cell">
                               <button
@@ -334,6 +424,7 @@ function App() {
                           <td></td>
                           <td className="grid-readonly-cell"></td>
                           <td className="grid-readonly-cell"></td>
+                          <td className="grid-readonly-cell"></td>
                         </tr>
                       ))}
                     </tbody>
@@ -343,10 +434,9 @@ function App() {
                 {/* Totals Panel & Checkout */}
                 <div className="pos-totals-container">
                   <div className="pos-totals-panel">
-                    <div className="total-row"><span>TỔNG CỘNG</span><span>{formatVND(getCartTotal())}</span></div>
-                    <div className="total-row"><span>GIẢM</span><span>0</span></div>
-                    <div className="total-row"><span>CÒN</span><span>{formatVND(getCartTotal())}</span></div>
-                    <div className="total-row"><span>ĐÃ GỒM VAT</span><span>0</span></div>
+                    <div className="total-row"><span>TỔNG CỘNG</span><span>{formatVND(getCartBaseTotal())}</span></div>
+                    <div className="total-row" style={{ color: 'var(--text-red)' }}><span>GIẢM</span><span>{formatVND(getCartDiscountTotal())}</span></div>
+                    <div className="total-row" style={{ fontWeight: 'bold' }}><span>CÒN</span><span>{formatVND(getCartFinalTotal())}</span></div>
                   </div>
                   <button className="checkout-btn">
                     <span className="tool-icon" style={{ marginBottom: 0 }}>💰</span> Tính tiền (F2)
@@ -365,7 +455,7 @@ function App() {
                 <input
                   ref={searchInputRef}
                   className="classic-input"
-                  style={{ width: '300px', backgroundColor: '#ffe4e1' }}
+                  style={{ flex: '1 1 200px', maxWidth: '300px', backgroundColor: '#ffe4e1', minWidth: 0 }}
                   value={posSearch}
                   onChange={e => setPosSearch(e.target.value)}
                   onKeyDown={e => {
@@ -390,10 +480,11 @@ function App() {
                     <thead>
                       <tr>
                         <th style={{ width: '15%' }}>Mã hàng</th>
-                        <th style={{ width: '45%' }}>Tên M.Hàng</th>
+                        <th style={{ width: '40%' }}>Tên M.Hàng</th>
                         <th style={{ width: '10%' }}>ĐVT</th>
                         <th style={{ width: '15%' }}>Đơn giá</th>
-                        <th style={{ width: '15%' }}>Giá 2</th>
+                        <th style={{ width: '10%' }}>Giá 2</th>
+                        <th style={{ width: '10%', textAlign: 'center' }}>Sửa</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -413,11 +504,23 @@ function App() {
                             if (e.key === 'Enter') addToCart(p);
                           }}
                         >
-                          <td>{p.sku}</td>
+                           <td>{p.sku}</td>
                           <td>{p.name}</td>
                           <td>{p.unit}</td>
                           <td className="text-right">{formatVND(p.price)}</td>
                           <td className="text-right">0</td>
+                          <td className="text-center" style={{ padding: '2px 0' }}>
+                            <button
+                              className="classic-btn"
+                              style={{ height: '18px', padding: '0 6px', fontSize: '10px', minWidth: '40px' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingProduct(p);
+                              }}
+                            >
+                              Sửa
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -527,6 +630,113 @@ function App() {
         <div className="status-panel" style={{ flex: 1 }}>hiện giờ không có khuyến mãi</div>
         <div className="status-panel">Điện nước TÂM NHI - 2026</div>
       </div>
+
+      {editingProduct && editForm && (
+        <div className="modal-overlay">
+          <div className="classic-dialog">
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Cập nhật thông tin mặt hàng</span>
+              <button className="dialog-close-btn" onClick={() => setEditingProduct(null)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Mã hàng:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={editForm.sku} 
+                  onChange={e => setEditForm({ ...editForm, sku: e.target.value })} 
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Tên mặt hàng:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={editForm.name} 
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>ĐVT:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={editForm.unit} 
+                  onChange={e => setEditForm({ ...editForm, unit: e.target.value })} 
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Đơn giá:</span>
+                <input 
+                  type="number" 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={editForm.price} 
+                  onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })} 
+                />
+              </div>
+              
+              <div className="dialog-buttons">
+                <button className="classic-btn" onClick={handleSaveProductEdit}>Ghi lại</button>
+                <button className="classic-btn" onClick={() => setEditingProduct(null)}>Hủy bỏ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSystemModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '280px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Cấu hình Hệ thống</span>
+              <button className="dialog-close-btn" onClick={() => setIsSystemModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <legend>Hiển thị & Thu phóng</legend>
+                <div style={{ fontSize: '11px', marginBottom: '4px' }}>Tỷ lệ thu phóng ứng dụng:</div>
+                <select 
+                  className="classic-input"
+                  style={{ width: '100%', height: '22px' }}
+                  value={tempZoom}
+                  onChange={e => setTempZoom(Number(e.target.value))}
+                >
+                  <option value={80}>80% (Nhỏ)</option>
+                  <option value={90}>90%</option>
+                  <option value={100}>100% (Mặc định)</option>
+                  <option value={110}>110%</option>
+                  <option value={120}>120%</option>
+                  <option value={130}>130%</option>
+                  <option value={140}>140%</option>
+                  <option value={150}>150% (Lớn)</option>
+                  <option value={175}>175%</option>
+                  <option value={200}>200% (Rất lớn)</option>
+                </select>
+              </fieldset>
+              
+              <div className="dialog-buttons" style={{ marginTop: '10px' }}>
+                <button 
+                  className="classic-btn" 
+                  onClick={() => {
+                    setZoom(tempZoom);
+                    setIsSystemModalOpen(false);
+                  }}
+                >
+                  Lưu lại
+                </button>
+                <button 
+                  className="classic-btn" 
+                  onClick={() => setIsSystemModalOpen(false)}
+                >
+                  Hủy bỏ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -62,6 +62,7 @@ body {
 /* Toolbar */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   background-color: var(--bg-toolbar);
   border-top: 1px solid var(--border-light);
   border-bottom: 1px solid var(--border-dark);
@@ -433,4 +434,85 @@ input, select, button {
   text-align: right;
   margin-right: 4px;
   font-size: 11px;
+}
+
+/* Win95 Dialog Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.classic-dialog {
+  width: 320px;
+  margin: auto;
+  background-color: var(--bg-panel);
+  border-top: 1.5px solid var(--border-light);
+  border-left: 1.5px solid var(--border-light);
+  border-right: 1.5px solid var(--border-black);
+  border-bottom: 1.5px solid var(--border-black);
+  box-shadow: 1px 1px 0px var(--border-dark) inset, -1px -1px 0px var(--border-dark) inset;
+  padding: 3px;
+}
+
+.dialog-title-bar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #fff;
+  padding: 3px 4px 3px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: bold;
+}
+
+.dialog-title {
+  font-size: 11px;
+}
+
+.dialog-close-btn {
+  width: 16px;
+  height: 14px;
+  background-color: var(--bg-panel);
+  border-top: 1px solid var(--border-light);
+  border-left: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-dark);
+  border-bottom: 1px solid var(--border-dark);
+  font-size: 9px;
+  font-weight: bold;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+}
+
+.dialog-close-btn:active {
+  border-top: 1px solid var(--border-dark);
+  border-left: 1px solid var(--border-dark);
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.dialog-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
 }

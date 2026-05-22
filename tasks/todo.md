@@ -86,3 +86,44 @@ Dựa trên yêu cầu và hình ảnh cung cấp, ứng dụng sẽ được đ
 ## Giai đoạn 15: Thiết kế lại Khu vực Thông tin Hóa đơn (Top section)
 - [x] Thêm các class `.classic-fieldset` và `.form-label-fixed` vào `App.css`.
 - [x] Thay thế panel hóa đơn cũ bằng 3 fieldset chia cột logic: Thông tin phiếu, Khách hàng & Ghi chú, và Khuyến mãi hóa đơn.
+
+## Giai đoạn 16: Hộp thoại Sửa Thông tin Mặt hàng (Edit Modal)
+- [x] Định nghĩa các class cho Dialog Win95 (`.modal-overlay`, `.classic-dialog`, `.dialog-title-bar`, `.dialog-body`, `.dialog-buttons`) trong `App.css`.
+- [x] Khai báo state `editingProduct`, `editForm` và hàm xử lý cập nhật dữ liệu `handleSaveProductEdit` trong `App.tsx`.
+- [x] Thêm cột "Sửa" bên cạnh cột "Đơn giá" trong bảng danh sách tìm kiếm dưới (Bottom Grid).
+- [x] Render hộp thoại dialog cho phép chỉnh sửa Mã hàng, Tên, ĐVT, Đơn giá và lưu lại vào State (cập nhật cả Cart và mặt hàng đang chọn).
+
+## Giai đoạn 17: Cấu hình Menu Tab & Modal Thu phóng (Zoom Config Modal)
+- [x] Khai báo state `isSystemModalOpen` và `zoom` (lưu trữ trong `localStorage`) trong `App.tsx`.
+- [x] Cập nhật Menu Bar: Xóa "Thu Chi" và "Trợ Giúp", đổi tên "Danh mục" thành "Sản phẩm", và gán sự kiện click cho "Hệ thống".
+- [x] Thiết kế Modal "Cấu hình Hệ thống" cho phép tùy chỉnh Zoom phần trăm giao diện, lưu cấu hình và đóng.
+
+## Giai đoạn 18: Tối ưu vị trí Tab Hệ thống & Tăng cường Responsive khi Zoom
+- [x] Cập nhật thanh Menu Bar: Di chuyển tab "Hệ thống" về phía bên phải bằng thẻ spacer.
+- [x] Cập nhật CSS `.toolbar` trong `App.css` hỗ trợ `flex-wrap: wrap` để tránh tràn nút khi zoom.
+- [x] Cấu hình `.pos-top-section` hỗ trợ `flex-wrap: wrap` và thiết lập `minWidth` cho từng fieldset.
+- [x] Thay đổi chiều rộng cố định của ô nhập Tìm kiếm thành kích thước co giãn (flex-basis với max-width).
+
+## Giai đoạn 19: Xử lý sự kiện ESC đóng Modal & Tối ưu hóa Thu phóng 200%
+- [x] Cập nhật Keyboard Listener trong `App.tsx`: Bấm ESC khi có modal hiển thị sẽ đóng modal đó và dừng xử lý.
+- [x] Thiết lập dependency array cho `useEffect` keyboard listener để tránh lỗi closure state.
+- [x] Cấu hình CSS `body` hỗ trợ `overflow: auto`.
+- [x] Thiết lập `min-width: 1000px` và `min-height: 650px` cho `.app-container` để đảm bảo hiển thị đủ nội dung khi zoom lên 200%.
+
+## Giai đoạn 20: Giữ Modal Luôn Giữa Màn Hình Khi Zoom & Cuộn Trang
+- [x] Cấu hình CSS cho `.modal-overlay` sử dụng `top: 0; left: 0; right: 0; bottom: 0` và `display: flex`.
+- [x] Thêm `margin: auto` cho `.classic-dialog` để căn giữa tuyệt đối và cuộn an toàn trong Flexbox.
+- [x] Thêm `useEffect` trong `App.tsx` để vô hiệu hóa scroll của `body` (`overflow: 'hidden'`) khi bất kỳ modal nào mở ra.
+
+## Giai đoạn 21: Tinh chỉnh cơ chế Thu phóng Kính lúp (Adaptive Kiosk Zoom)
+- [x] Khôi phục CSS `body { overflow: hidden }` để chặn thanh cuộn ngoài cửa sổ.
+- [x] Gỡ bỏ `min-width` và `min-height` của `.app-container` trong `App.css`.
+- [x] Cập nhật `useEffect` thu phóng trong `App.tsx`: Tính toán lại `width` và `height` của `.app-container` bằng công thức `calc(100vw / Z)` để luôn full screen không tràn.
+- [x] Điều chỉnh lại giới hạn kéo giãn chiều cao `middleHeight` theo tỉ lệ zoom trong mousemove handler.
+
+## Giai đoạn 22: Thống kê Tiền giảm giá & Thêm cột Tiền giảm ở mỗi Item
+- [x] Định nghĩa các hàm phụ trợ mới trong `App.tsx`: `getCartBaseTotal` (tổng tiền chưa giảm), `getCartDiscountTotal` (tổng tiền giảm), `getCartFinalTotal` (thực thu).
+- [x] Cập nhật bảng Giỏ hàng: Thêm cột `Tiền Giảm` nằm sau cột `Km%` và điều chỉnh lại độ rộng các cột.
+- [x] Hiển thị số tiền được giảm của từng item bằng công thức `amount * (discount / 100)`.
+- [x] Cập nhật hàng trống phụ mô phỏng (empty rows) thêm một thẻ `td` để không lệch cột.
+- [x] Cập nhật Panel tổng cộng: Xóa bỏ dòng `ĐÃ GỒM VAT`, hiển thị đúng giá trị `TỔNG CỘNG`, `GIẢM`, và `CÒN`.
