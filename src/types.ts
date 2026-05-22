@@ -8,6 +8,7 @@ export interface Product {
   stock: number;
   unit: string;
   link?: string;
+  available?: boolean;
 }
 
 export interface CartItem {

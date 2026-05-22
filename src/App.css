@@ -561,3 +561,41 @@ input, select, button {
 .selected-row td {
   color: #fff !important;
 }
+
+/* Print configuration for thermal bill printer */
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+@media print {
+  /* Hide the rest of the application layout */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Make only the print section visible and positioned */
+  #print-section, #print-section * {
+    visibility: visible !important;
+  }
+  
+  #print-section {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 72mm !important; /* formatted for standard 80mm thermal receipt roll width */
+    margin: 0 !important;
+    padding: 1mm !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    color: #000 !important;
+    background: #fff !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Strip headers, footers, page numbers and default margins */
+  @page {
+    size: auto;
+    margin: 0mm !important;
+  }
+}

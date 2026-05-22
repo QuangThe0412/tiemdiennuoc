@@ -159,8 +159,18 @@ Dựa trên yêu cầu và hình ảnh cung cấp, ứng dụng sẽ được đ
 - [x] Thực thi đầy đủ phím tắt phím chức năng F1 (Tạm lưu hóa đơn), F3 (Bán nợ), F9 (Xem hóa đơn tạm lưu) và F2 (Thanh toán).
 - [x] Cài đặt ESC lắng nghe thông minh cho tất cả các modal overlay mới để đóng khi người dùng nhấn thoát.
 
-## Giai đoạn 28: Review Hóa đơn & Nút Thanh Toán (Tính tiền)
-- [ ] Chuyển chức năng "Tính tiền (F2)" từ alert mặc định sang một Modal "Review hóa đơn".
-- [ ] Hiển thị đầy đủ thông tin hóa đơn chuẩn bị thanh toán (Khách hàng, Danh sách mặt hàng, Tổng tiền, Giảm giá, Tổng thanh toán).
-- [ ] Thiết kế các nút chức năng trong hộp thoại: "In" (Thanh toán và In hóa đơn), "Đóng" (Quay lại chỉnh sửa), và "Hủy" (Hủy bỏ hóa đơn hiện tại và dọn sạch giỏ hàng).
-- [ ] Tích hợp phím ESC để đóng Modal Checkout này.
+## Giai đoạn 28: Chuyển đổi Logic Nhóm sang Quản lý Đơn vị tính & Cấu trúc lại bảng sản phẩm
+- [ ] Thay thế hoàn toàn logic nhóm hàng (categories) thành logic quản lý đơn vị tính (units).
+  - Đổi tên state `categories` thành `units` (hoặc khởi tạo `units` làm danh sách các ĐVT hợp lệ).
+  - Đổi nút "Quản lý nhóm" thành "Quản lý ĐVT". Khi click mở modal "Quản lý đơn vị tính" để thêm, sửa, xóa ĐVT.
+  - Cập nhật bộ lọc ở POS và danh sách Sản phẩm thành bộ lọc theo ĐVT.
+- [ ] Cấu trúc lại lưới sản phẩm (Inventory Grid):
+  - Cột 1: **Hình ảnh** (Thay thế cột Nhóm). Hiển thị hình thu nhỏ (thumbnail) từ `p.link`. Nếu không có, hiển thị biểu tượng ảnh trống. Khi click chọn/chỉnh sửa dòng, có thể nhập text link URL ảnh trực tiếp.
+  - Cột 2: **Mã hàng** (Mã hàng được kéo lên trước).
+  - Cột 3: **Tên M.Hàng**.
+  - Cột 4: **ĐVT** (Ô select chọn ĐVT có sẵn trong danh sách `units`).
+  - Cột 5: **Đơn giá**.
+  - Cột 6: **Đ.giá 2** (Giữ nguyên).
+  - Cột 7: **Còn bán** (Trạng thái checkbox/☑, bỏ cột Tính chất MH).
+  - Cột 8: **Kho** (Tồn kho của sản phẩm `p.stock`, thay thế cột tồn tối thiểu và bỏ cột Ghi chú).
+  - Cột 9: **Xóa** (Nút xóa).

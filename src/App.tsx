@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { initialProducts } from "./seedData";
-import { Product, CartItem, Invoice, AppData } from "./types";
+import { Product, CartItem } from "./types";
 import "./App.css";
 
 const removeAccents = (str: string): string => {
@@ -61,6 +60,10 @@ function App() {
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
 
+  // Modal for Checkout Review
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isUnitManagerOpen, setIsUnitManagerOpen] = useState(false);
+
   // POS State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [posSearch, setPosSearch] = useState("");
@@ -71,10 +74,16 @@ function App() {
   const [customerSearchQuery, setCustomerSearchQuery] = useState("Khách lẻ");
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [posNotes, setPosNotes] = useState("");
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState("");
+  const [units, setUnits] = useState<string[]>(() => {
+    const uniq = Array.from(new Set(initialProducts.map(p => p.unit).filter(Boolean)));
+    return uniq.length > 0 ? uniq : ["Cuộn", "Cái", "Cây", "Bộ", "Mét", "Thùng"];
+  });
+  const [newUnitName, setNewUnitName] = useState("");
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number } | null>(null);
+  const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
   const [zoom, setZoom] = useState(() => {
     const saved = localStorage.getItem("app_zoom");
@@ -82,8 +91,32 @@ function App() {
   });
   const [tempZoom, setTempZoom] = useState(zoom);
 
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getFormattedDate = (date: Date) => {
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+  };
+
+  const getFormattedTime = (date: Date) => {
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${h}:${min}`;
+  };
+
   // Inventory State
   const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryUnitFilter, setInventoryUnitFilter] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appContainerRef = useRef<HTMLDivElement>(null);
@@ -140,12 +173,13 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen) {
+        if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen || isCheckoutModalOpen) {
           setEditingProduct(null);
           setIsSystemModalOpen(false);
           setIsCustomerModalOpen(false);
           setIsPayDebtModalOpen(false);
           setIsPendingModalOpen(false);
+          setIsCheckoutModalOpen(false);
           return;
         }
         const now = Date.now();
@@ -184,7 +218,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
+  }, [selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
 
   useEffect(() => {
     // Tạm thời nạp dữ liệu mẫu
@@ -198,6 +232,8 @@ function App() {
         name: editingProduct.name,
         unit: editingProduct.unit,
         price: editingProduct.price,
+        link: editingProduct.link || "",
+        available: editingProduct.available !== false,
       });
     } else {
       setEditForm(null);
@@ -223,7 +259,7 @@ function App() {
   }, [isSystemModalOpen, zoom]);
 
   useEffect(() => {
-    if (editingProduct || isSystemModalOpen) {
+    if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen || isCheckoutModalOpen || isUnitManagerOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -231,7 +267,7 @@ function App() {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [editingProduct, isSystemModalOpen]);
+  }, [editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, isUnitManagerOpen]);
 
   const getCartBaseTotal = () => {
     return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -247,6 +283,98 @@ function App() {
 
   const getCartFinalTotal = () => {
     return getCartBaseTotal() - getCartDiscountTotal();
+  };
+
+  const updateProductField = (productId: string, field: keyof Product, value: any) => {
+    setProducts(prev => prev.map(p => {
+      if (p.id === productId) {
+        const updated = { ...p, [field]: value };
+        return updated;
+      }
+      return p;
+    }));
+    setSelectedProduct(prevSel => {
+      if (prevSel?.id === productId) {
+        return { ...prevSel, [field]: value };
+      }
+      return prevSel;
+    });
+  };
+
+  const handleAddUnitInline = () => {
+    if (!newUnitName || !newUnitName.trim()) {
+      alert("Vui lòng nhập tên ĐVT!");
+      return;
+    }
+    const unitTrim = newUnitName.trim();
+    if (units.includes(unitTrim)) {
+      alert("ĐVT này đã tồn tại!");
+      return;
+    }
+    setUnits(prev => [...prev, unitTrim]);
+    setNewUnitName("");
+  };
+
+  const handleRenameUnitInline = (oldName: string) => {
+    const newName = prompt(`Nhập tên mới cho ĐVT "${oldName}":`, oldName);
+    if (!newName || !newName.trim()) return;
+    const newNameTrim = newName.trim();
+    if (newNameTrim === oldName) return;
+    if (units.includes(newNameTrim)) {
+      alert("ĐVT mới này đã tồn tại!");
+      return;
+    }
+    
+    // Update units list
+    setUnits(prev => prev.map(u => u === oldName ? newNameTrim : u));
+    
+    // Update all products belonging to the old unit
+    setProducts(prev => prev.map(p => p.unit === oldName ? { ...p, unit: newNameTrim } : p));
+    
+    // Update selected filter if active
+    if (selectedUnitFilter === oldName) {
+      setSelectedUnitFilter(newNameTrim);
+    }
+    if (inventoryUnitFilter === oldName) {
+      setInventoryUnitFilter(newNameTrim);
+    }
+    
+    alert(`Đã đổi tên ĐVT thành "${newNameTrim}" thành công!`);
+  };
+
+  const handleDeleteUnitInline = (unitToDelete: string) => {
+    // Count products using this unit
+    const productCount = products.filter(p => p.unit === unitToDelete).length;
+    let confirmMsg = `Bạn có chắc muốn xóa ĐVT "${unitToDelete}"?`;
+    if (productCount > 0) {
+      confirmMsg = `ĐVT "${unitToDelete}" đang được sử dụng cho ${productCount} mặt hàng. Nếu xóa, các mặt hàng này sẽ được chuyển sang ĐVT "Cái". Bạn vẫn muốn xóa?`;
+    }
+    
+    if (confirm(confirmMsg)) {
+      // Remove from units list
+      setUnits(prev => prev.filter(u => u !== unitToDelete));
+      
+      // Update products' unit
+      setProducts(prev => prev.map(p => p.unit === unitToDelete ? { ...p, unit: "Cái" } : p));
+      
+      // Add "Cái" to units if not already present
+      setUnits(prev => {
+        if (!prev.includes("Cái")) {
+          return [...prev, "Cái"];
+        }
+        return prev;
+      });
+
+      // Reset filters if they were set to the deleted unit
+      if (selectedUnitFilter === unitToDelete) {
+        setSelectedUnitFilter("");
+      }
+      if (inventoryUnitFilter === unitToDelete) {
+        setInventoryUnitFilter("");
+      }
+      
+      alert(`Đã xóa ĐVT "${unitToDelete}" thành công.`);
+    }
   };
 
   const addToCart = (p: Product) => {
@@ -275,21 +403,55 @@ function App() {
   const handleSaveProductEdit = () => {
     if (!editingProduct || !editForm) return;
 
-    setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...editForm } : p));
-
-    if (selectedProduct && selectedProduct.id === editingProduct.id) {
-      setSelectedProduct(prev => prev ? { ...prev, ...editForm } : null);
-    }
-
-    setCart(prev => prev.map(item => {
-      if (item.product.id === editingProduct.id) {
-        return {
-          ...item,
-          product: { ...item.product, ...editForm }
-        };
+    if (editingProduct.id === "NEW") {
+      // Adding a new product
+      if (!editForm.name.trim()) {
+        alert("Tên mặt hàng không được để trống!");
+        return;
       }
-      return item;
-    }));
+      if (!editForm.sku.trim()) {
+        alert("Mã hàng không được để trống!");
+        return;
+      }
+      // Check if SKU already exists
+      if (products.some(p => p.sku.toLowerCase() === editForm.sku.toLowerCase())) {
+        alert(`Mã hàng "${editForm.sku}" đã tồn tại!`);
+        return;
+      }
+      const newId = (Math.max(...products.map(p => Number(p.id) || 0)) + 1).toString();
+      const newProd: Product = {
+        id: newId,
+        sku: editForm.sku,
+        name: editForm.name,
+        category: "Khác",
+        price: editForm.price,
+        cost: 0,
+        stock: 0,
+        unit: editForm.unit,
+        link: editForm.link,
+        available: editForm.available !== false,
+      };
+      setProducts(prev => [...prev, newProd]);
+      alert(`Đã thêm mặt hàng "${editForm.name}" thành công.`);
+    } else {
+      // Editing existing product
+      setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...editForm } : p));
+
+      if (selectedProduct && selectedProduct.id === editingProduct.id) {
+        setSelectedProduct(prev => prev ? { ...prev, ...editForm } : null);
+      }
+
+      setCart(prev => prev.map(item => {
+        if (item.product.id === editingProduct.id) {
+          return {
+            ...item,
+            product: { ...item.product, ...editForm }
+          };
+        }
+        return item;
+      }));
+      alert(`Đã sửa mặt hàng "${editForm.name}" thành công.`);
+    }
 
     setEditingProduct(null);
   };
@@ -341,21 +503,24 @@ function App() {
     setSelectedCartIndex(null);
   };
 
-  const handleCheckout = () => {
-    if (cart.length === 0) {
-      alert("Không có sản phẩm nào trong giỏ hàng để thanh toán!");
-      return;
-    }
-    const totalToPay = getCartFinalTotal();
-    alert(`Thanh toán hóa đơn ${invoiceNo} thành công (Tiền mặt).\nTổng tiền thực tế: ${formatVND(totalToPay)}đ.`);
-    
-    // Reset POS
+  const resetPOSAfterSale = () => {
     setCart([]);
     setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
     setSelectedCustomer(customers[0]);
     setCustomerSearchQuery(customers[0].name);
     setPosNotes("");
     setSelectedCartIndex(null);
+    setIsCheckoutModalOpen(false);
+    setInvoiceDateTime(null);
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      alert("Không có sản phẩm nào trong giỏ hàng để thanh toán!");
+      return;
+    }
+    setInvoiceDateTime(new Date());
+    setIsCheckoutModalOpen(true);
   };
 
   const updateCartItem = (index: number, field: 'quantity' | 'price' | 'discount', value: number) => {
@@ -421,8 +586,8 @@ function App() {
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Thời gian:</span>
-                  <input className="classic-input" value="20/03/2026" readOnly style={{ width: '80px', minWidth: 0 }} />
-                  <input className="classic-input" value="09:45" readOnly style={{ width: '50px', minWidth: 0 }} />
+                  <input className="classic-input" value={getFormattedDate(currentDateTime)} readOnly style={{ width: '80px', minWidth: 0 }} />
+                  <input className="classic-input" value={getFormattedTime(currentDateTime)} readOnly style={{ width: '50px', minWidth: 0 }} />
                 </div>
               </fieldset>
 
@@ -496,8 +661,6 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <span className="form-label-fixed" style={{ minWidth: '45px', marginLeft: '6px' }}>Đối tác:</span>
-                  <input className="classic-input" value="Không có" readOnly style={{ width: '120px', minWidth: 0 }} />
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Ghi chú:</span>
@@ -659,7 +822,19 @@ function App() {
             {/* Bottom Section: Search & Product List */}
             <div className="pos-bottom-section">
               <div className="pos-search-bar">
-                <span style={{ fontSize: '11px', fontWeight: 'bold', marginLeft: '10px' }}>Mã/tên (Esc)</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', marginLeft: '10px' }}>ĐVT:</span>
+                <select
+                  className="classic-input"
+                  style={{ width: '120px', marginLeft: '4px', marginRight: '6px' }}
+                  value={selectedUnitFilter}
+                  onChange={e => setSelectedUnitFilter(e.target.value)}
+                >
+                  <option value="">Tất cả</option>
+                  {units.map(u => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Mã/tên (Esc)</span>
                 <input
                   ref={searchInputRef}
                   className="classic-input"
@@ -689,19 +864,19 @@ function App() {
                     <thead>
                       <tr>
                         <th style={{ width: '15%' }}>Mã hàng</th>
-                        <th style={{ width: '40%' }}>Tên M.Hàng</th>
+                        <th style={{ width: '50%' }}>Tên M.Hàng</th>
                         <th style={{ width: '10%' }}>ĐVT</th>
                         <th style={{ width: '15%' }}>Đơn giá</th>
                         <th style={{ width: '10%' }}>Giá 2</th>
-                        <th style={{ width: '10%', textAlign: 'center' }}>Sửa</th>
                       </tr>
                     </thead>
                     <tbody>
                       {products.filter(p => {
+                        const matchesUnit = !selectedUnitFilter || p.unit === selectedUnitFilter;
                         const lowerSearch = removeAccents(posSearch.toLowerCase());
                         const nameNorm = removeAccents(p.name.toLowerCase());
                         const skuNorm = removeAccents(p.sku.toLowerCase());
-                        return nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch);
+                        return matchesUnit && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
                       }).map(p => (
                         <tr
                           key={p.id}
@@ -718,18 +893,6 @@ function App() {
                           <td>{p.unit}</td>
                           <td className="text-right">{formatVND(p.price)}</td>
                           <td className="text-right">0</td>
-                          <td className="text-center" style={{ padding: '2px 0' }}>
-                            <button
-                              className="classic-btn"
-                              style={{ height: '18px', padding: '0 6px', fontSize: '10px', minWidth: '40px' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingProduct(p);
-                              }}
-                            >
-                              Sửa
-                            </button>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -762,25 +925,65 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Inventory Toolbar */}
             <div className="toolbar">
-              <button className="tool-btn"><span className="tool-icon">➕</span>Thêm</button>
-              <button className="tool-btn"><span className="tool-icon">✏️</span>Sửa</button>
-              <button className="tool-btn"><span className="tool-icon">❌</span>Xóa</button>
-              <div style={{ width: '1px', backgroundColor: 'var(--border-dark)', margin: '0 4px' }}></div>
-              <button className="tool-btn"><span className="tool-icon">📂</span>Gom nhóm</button>
-              <button className="tool-btn"><span className="tool-icon">👁️</span>Xem</button>
+              <button className="tool-btn" onClick={() => {
+                setEditingProduct({
+                  id: "NEW",
+                  sku: "",
+                  name: "",
+                  category: "Khác",
+                  price: 0,
+                  cost: 0,
+                  stock: 0,
+                  unit: units[0] || "Cái",
+                });
+              }}>
+                <span className="tool-icon">➕</span>Thêm
+              </button>
+              <button className="tool-btn" onClick={() => setIsUnitManagerOpen(true)}>
+                <span className="tool-icon">📁</span>Quản lý ĐVT
+              </button>
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '4px' }}>
                 <span>Lọc:</span>
                 <select className="classic-input" style={{ width: '100px' }}>
                   <option>Hàng còn bán</option>
                   <option>Tất cả</option>
                 </select>
+                <span style={{ marginLeft: '10px' }}>ĐVT:</span>
+                <select
+                  className="classic-input"
+                  style={{ width: '120px' }}
+                  value={inventoryUnitFilter}
+                  onChange={e => setInventoryUnitFilter(e.target.value)}
+                >
+                  <option value="">Tất cả</option>
+                  {units.map(u => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
                 <span style={{ marginLeft: '10px' }}>Tìm(F1)</span>
                 <input className="classic-input" style={{ width: '150px' }} value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} />
               </div>
               <div style={{ flex: 1 }}></div>
-              <button className="tool-btn"><span className="tool-icon">📥</span>Import</button>
-              <button className="tool-btn"><span className="tool-icon">📤</span>Export</button>
-              <button className="tool-btn"><span className="tool-icon">↕️</span>Tăng/giảm giá</button>
+              <button className="tool-btn" onClick={() => alert("Chức năng Nhập từ Excel đang được phát triển...")}>
+                <span className="tool-icon">📥</span>Import
+              </button>
+              <button className="tool-btn" onClick={() => {
+                const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Kho"];
+                const rows = products.map(p => [p.sku, p.name, p.unit, p.price.toString(), p.stock.toString()]);
+                const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", "danh_sach_san_pham.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                alert("Đã xuất danh sách sản phẩm ra tệp CSV thành công!");
+              }}>
+                <span className="tool-icon">📤</span>Export
+              </button>
             </div>
 
             {/* Main Inventory Grid */}
@@ -788,38 +991,156 @@ function App() {
               <table className="data-grid">
                 <thead>
                   <tr>
-                    <th style={{ width: '10%' }}>Nhóm</th>
-                    <th style={{ width: '25%' }}>Tên M.Hàng</th>
-                    <th style={{ width: '10%' }}>Mã hàng</th>
-                    <th style={{ width: '5%' }}>ĐVT</th>
-                    <th style={{ width: '10%' }}>Đơn giá</th>
+                    <th style={{ width: '10%' }}>Hình ảnh</th>
+                    <th style={{ width: '15%' }}>Mã hàng</th>
+                    <th style={{ width: '30%' }}>Tên M.Hàng</th>
+                    <th style={{ width: '8%' }}>ĐVT</th>
+                    <th style={{ width: '12%' }}>Đơn giá</th>
                     <th style={{ width: '10%' }}>Đ.giá 2</th>
-                    <th style={{ width: '10%' }}>Tính chất MH</th>
-                    <th style={{ width: '5%' }}>Còn bán</th>
-                    <th style={{ width: '5%' }}>Tồn t.thiểu</th>
-                    <th style={{ width: '10%' }}>Ghi Chú</th>
+                    <th style={{ width: '7%' }}>Còn bán</th>
+                    <th style={{ width: '8%' }}>Kho</th>
+                    <th style={{ width: '5%', textAlign: 'center' }}>Xóa</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.filter(p => {
+                    const matchesUnit = !inventoryUnitFilter || p.unit === inventoryUnitFilter;
                     const lowerSearch = removeAccents(inventorySearch.toLowerCase());
                     const nameNorm = removeAccents(p.name.toLowerCase());
                     const skuNorm = removeAccents(p.sku.toLowerCase());
-                    return nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch);
-                  }).map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.category}</td>
-                      <td>{p.name}</td>
-                      <td>{p.sku}</td>
-                      <td>{p.unit}</td>
-                      <td className="text-right">{formatVND(p.price)}</td>
-                      <td className="text-right">0</td>
-                      <td>Hàng chuyên bán</td>
-                      <td className="text-center">☑</td>
-                      <td className="text-right">0</td>
-                      <td></td>
-                    </tr>
-                  ))}
+                    return matchesUnit && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
+                  }).map((p) => {
+                    const isSelected = selectedProduct?.id === p.id;
+                    return (
+                      <tr 
+                        key={p.id}
+                        className={isSelected ? "selected-row" : ""}
+                        onClick={() => setSelectedProduct(p)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {isSelected ? (
+                          <>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={p.link || ""}
+                                onChange={e => updateProductField(p.id, 'link', e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                placeholder="URL ảnh"
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={p.sku}
+                                onChange={e => updateProductField(p.id, 'sku', e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={p.name}
+                                onChange={e => updateProductField(p.id, 'name', e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <select
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 2px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={p.unit}
+                                onChange={e => updateProductField(p.id, 'unit', e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                {units.map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                type="number"
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                                value={p.price}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'price', val);
+                                  }
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="text-center" style={{ padding: '2px' }}>
+                              {p.link ? (
+                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} />
+                              ) : (
+                                <span style={{ color: '#808080', fontSize: '10px' }}>[Không ảnh]</span>
+                              )}
+                            </td>
+                            <td>{p.sku}</td>
+                            <td>{p.name}</td>
+                            <td>{p.unit}</td>
+                            <td className="text-right">{formatVND(p.price)}</td>
+                          </>
+                        )}
+                        <td className="text-right">0</td>
+                        <td className="text-center" style={{ padding: '2px' }}>
+                          <input
+                            type="checkbox"
+                            style={{ cursor: 'pointer' }}
+                            checked={p.available !== false}
+                            onChange={e => updateProductField(p.id, 'available', e.target.checked)}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </td>
+                        {isSelected ? (
+                          <td style={{ padding: '1px' }}>
+                            <input
+                              type="number"
+                              className="classic-input"
+                              style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                              value={p.stock}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                if (val >= 0) {
+                                  updateProductField(p.id, 'stock', val);
+                                }
+                              }}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </td>
+                        ) : (
+                          <td className="text-right">{p.stock}</td>
+                        )}
+                        <td className="text-center" style={{ padding: '2px 0' }}>
+                          <button
+                            className="classic-btn"
+                            style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Bạn có chắc chắn muốn xóa mặt hàng "${p.name}" không?`)) {
+                                setProducts(prev => prev.filter(item => item.id !== p.id));
+                                if (selectedProduct?.id === p.id) {
+                                  setSelectedProduct(null);
+                                }
+                              }
+                            }}
+                          >
+                            Xóa
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -960,7 +1281,7 @@ function App() {
         <div className="modal-overlay">
           <div className="classic-dialog">
             <div className="dialog-title-bar">
-              <span className="dialog-title">Cập nhật thông tin mặt hàng</span>
+              <span className="dialog-title">{editingProduct.id === "NEW" ? "Thêm Mặt Hàng mới" : "Cập nhật thông tin mặt hàng"}</span>
               <button className="dialog-close-btn" onClick={() => setEditingProduct(null)}>✕</button>
             </div>
             <div className="dialog-body">
@@ -986,12 +1307,56 @@ function App() {
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>ĐVT:</span>
+                <select 
+                  className="classic-input" 
+                  style={{ flex: 1 }}
+                  value={editForm.unit}
+                  onChange={e => setEditForm({ ...editForm, unit: e.target.value })}
+                >
+                  {units.map(u => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                  {!units.includes(editForm.unit) && editForm.unit ? (
+                    <option value={editForm.unit}>{editForm.unit}</option>
+                  ) : null}
+                </select>
+                <button 
+                  className="classic-btn"
+                  style={{ marginLeft: '4px', padding: '0 6px', height: '21px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={() => {
+                    const newU = prompt("Nhập tên ĐVT mới:");
+                    if (newU && newU.trim()) {
+                      const uTrim = newU.trim();
+                      if (!units.includes(uTrim)) {
+                        setUnits(prev => [...prev, uTrim]);
+                      }
+                      setEditForm({ ...editForm, unit: uTrim });
+                    }
+                  }}
+                  type="button"
+                  title="Thêm ĐVT mới"
+                >
+                  ➕
+                </button>
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Hình ảnh (URL):</span>
                 <input 
                   className="classic-input" 
                   style={{ flex: 1 }} 
-                  value={editForm.unit} 
-                  onChange={e => setEditForm({ ...editForm, unit: e.target.value })} 
+                  value={editForm.link || ""} 
+                  onChange={e => setEditForm({ ...editForm, link: e.target.value })} 
                   onFocus={(e) => e.target.select()}
+                  placeholder="Nhập link hình ảnh..."
+                />
+              </div>
+              <div className="form-row" style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Còn bán:</span>
+                <input 
+                  type="checkbox"
+                  style={{ cursor: 'pointer', margin: 0 }}
+                  checked={editForm.available !== false} 
+                  onChange={e => setEditForm({ ...editForm, available: e.target.checked })} 
                 />
               </div>
               <div className="form-row">
@@ -1255,6 +1620,257 @@ function App() {
           </div>
         </div>
       )}
+
+      {isCheckoutModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '450px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Xem trước hóa đơn - {invoiceNo}</span>
+              <button className="dialog-close-btn" onClick={() => setIsCheckoutModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ gap: '6px' }}>
+              <div style={{
+                backgroundColor: '#fff',
+                border: '1.5px solid var(--border-dark)',
+                padding: '12px',
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                color: '#000',
+                maxHeight: '350px',
+                overflowY: 'auto'
+              }}>
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>
+                  CỬA HÀNG ĐIỆN NƯỚC TÂM NHI
+                </div>
+                <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                  ĐC: Khu phố 3, Thị trấn Củ Chi, TP. HCM<br/>
+                  SĐT: 0908 123 456
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                <div><strong>Số HĐ:</strong> {invoiceNo}</div>
+                <div><strong>Ngày:</strong> {invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`}</div>
+                <div><strong>Khách hàng:</strong> {selectedCustomer.name} {selectedCustomer.phone ? `(${selectedCustomer.phone})` : ''}</div>
+                {posNotes && <div><strong>Ghi chú:</strong> {posNotes}</div>}
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                
+                <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #000', textAlign: 'left' }}>
+                      <th style={{ padding: '2px 0' }}>Tên hàng</th>
+                      <th style={{ textAlign: 'right', padding: '2px 0' }}>SL</th>
+                      <th style={{ textAlign: 'right', padding: '2px 0' }}>Đ.Giá</th>
+                      <th style={{ textAlign: 'right', padding: '2px 0' }}>Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cart.map((item, idx) => {
+                      const baseAmt = item.product.price * item.quantity;
+                      const disc = item.discount || 0;
+                      const finalAmt = baseAmt - baseAmt * (disc / 100);
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px dashed #eee' }}>
+                          <td style={{ padding: '4px 0', wordBreak: 'break-all' }}>{item.product.name}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 0' }}>{item.quantity}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 0' }}>{formatVND(item.product.price)}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 0' }}>{formatVND(finalAmt)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Cộng tiền hàng:</span>
+                  <span>{formatVND(getCartBaseTotal())}đ</span>
+                </div>
+                {getCartDiscountTotal() > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'blue' }}>
+                    <span>Giảm giá:</span>
+                    <span>-{formatVND(getCartDiscountTotal())}đ</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', color: 'red', marginTop: '4px' }}>
+                  <span>TỔNG CỘNG:</span>
+                  <span>{formatVND(getCartFinalTotal())}đ</span>
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                <div style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '6px' }}>
+                  Cảm ơn Quý khách. Hẹn gặp lại!
+                </div>
+              </div>
+              
+              <div className="dialog-buttons" style={{ marginTop: '8px' }}>
+                <button className="classic-btn" onClick={() => {
+                  window.print();
+                  resetPOSAfterSale();
+                  alert("Đã gửi lệnh in hóa đơn thành công!");
+                }}>
+                  🖨️ IN
+                </button>
+                <button className="classic-btn" onClick={() => {
+                  resetPOSAfterSale();
+                  alert("Thanh toán thành công!");
+                }}>
+                  ✔️ Đóng
+                </button>
+                <button className="classic-btn" onClick={() => setIsCheckoutModalOpen(false)}>
+                  ❌ Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isUnitManagerOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '450px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Quản lý đơn vị tính</span>
+              <button className="dialog-close-btn" onClick={() => setIsUnitManagerOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ gap: '10px', padding: '10px' }}>
+              {/* Form thêm ĐVT */}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' }}>Tên ĐVT mới:</span>
+                <input 
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={newUnitName}
+                  onChange={e => setNewUnitName(e.target.value)}
+                  placeholder="Nhập tên ĐVT..."
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      handleAddUnitInline();
+                    }
+                  }}
+                />
+                <button className="classic-btn" onClick={handleAddUnitInline}>
+                  Thêm mới
+                </button>
+              </div>
+
+              {/* Bảng danh sách ĐVT */}
+              <div className="grid-container" style={{ maxHeight: '250px', overflowY: 'auto', border: '1.5px solid var(--border-dark)' }}>
+                <table className="data-grid" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '70%' }}>Tên đơn vị tính</th>
+                      <th style={{ width: '30%', textAlign: 'center' }}>Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.map(u => (
+                      <tr key={u}>
+                        <td style={{ fontWeight: 'bold' }}>{u}</td>
+                        <td style={{ textAlign: 'center', display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button 
+                            className="classic-btn" 
+                            style={{ padding: '2px 6px', fontSize: '10px', minWidth: 'auto' }}
+                            onClick={() => handleRenameUnitInline(u)}
+                          >
+                            ✏️ Sửa
+                          </button>
+                          <button 
+                            className="classic-btn" 
+                            style={{ padding: '2px 6px', fontSize: '10px', minWidth: 'auto', color: 'red' }}
+                            onClick={() => handleDeleteUnitInline(u)}
+                          >
+                            ❌ Xóa
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button className="classic-btn" onClick={() => setIsUnitManagerOpen(false)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print section for 80mm thermal POS receipt printer */}
+      <div id="print-section" className="print-only">
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', margin: '0 0 2px 0', textTransform: 'uppercase' }}>
+          Điện nước Tâm Nhi
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '10px', margin: '0 0 6px 0' }}>
+          ĐC: Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM<br />
+          SĐT: 0908 123 456
+        </div>
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0 6px 0' }}>
+          PHIẾU THANH TOÁN
+        </div>
+        <div style={{ fontSize: '10px', margin: '0 0 6px 0', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div><strong>Số phiếu:</strong> {invoiceNo}</div>
+          <div><strong>Thời gian:</strong> {invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`}</div>
+          <div><strong>Khách hàng:</strong> {selectedCustomer.name} {selectedCustomer.phone ? `(${selectedCustomer.phone})` : ''}</div>
+          {posNotes && <div><strong>Ghi chú:</strong> {posNotes}</div>}
+        </div>
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+        
+        <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse', margin: '4px 0' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #000', textAlign: 'left' }}>
+              <th style={{ padding: '2px 0', fontWeight: 'bold' }}>Tên hàng</th>
+              <th style={{ textAlign: 'right', padding: '2px 0', width: '25px', fontWeight: 'bold' }}>SL</th>
+              <th style={{ textAlign: 'right', padding: '2px 0', width: '55px', fontWeight: 'bold' }}>Đ.Giá</th>
+              <th style={{ textAlign: 'right', padding: '2px 0', width: '65px', fontWeight: 'bold' }}>T.Tiền</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cart.map((item, idx) => {
+              const baseAmt = item.product.price * item.quantity;
+              const disc = item.discount || 0;
+              const finalAmt = baseAmt - baseAmt * (disc / 100);
+              return (
+                <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
+                  <td style={{ padding: '3px 0', verticalAlign: 'top', wordBreak: 'break-word' }}>
+                    {item.product.name}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                    {item.quantity}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                    {formatVND(item.product.price)}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                    {formatVND(finalAmt)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+        <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '3px', margin: '4px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Cộng tiền hàng:</span>
+            <span>{formatVND(getCartBaseTotal())}đ</span>
+          </div>
+          {getCartDiscountTotal() > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Giảm giá:</span>
+              <span>-{formatVND(getCartDiscountTotal())}đ</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '12px', marginTop: '2px' }}>
+            <span>TỔNG CỘNG:</span>
+            <span>{formatVND(getCartFinalTotal())}đ</span>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+        <div style={{ textAlign: 'center', fontSize: '10px', fontStyle: 'italic', margin: '8px 0 0 0' }}>
+          Cảm ơn Quý khách. Hẹn gặp lại!
+        </div>
+      </div>
     </div>
   );
 }
