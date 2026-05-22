@@ -11,18 +11,67 @@ const removeAccents = (str: string): string => {
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'd');
 };
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  debt: number;
+}
+
+interface PendingInvoice {
+  invoiceNo: string;
+  dateTime: string;
+  customer: Customer;
+  items: CartItem[];
+  notes: string;
+}
 
 function App() {
-  const [activeTab, setActiveTab] = useState<"pos" | "inventory">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "inventory" | "customers">("pos");
 
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
 
+  // Customer State
+  const [customers, setCustomers] = useState<Customer[]>([
+    { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 },
+    { id: '2', name: 'Nguyễn Văn A', phone: '0901234567', address: '123 Đường Lớn', debt: 150000 },
+    { id: '3', name: 'Trần Thị B', phone: '0987654321', address: '45 Ngõ Nhỏ', debt: 0 },
+    { id: '4', name: 'Công ty Điện nước Đại Việt', phone: '0243555666', address: 'KCN Bắc Thăng Long', debt: 5000000 },
+  ]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [selectedCustomerIdx, setSelectedCustomerIdx] = useState<number | null>(null);
+
+  // Modal for Add/Edit Customer
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [customerForm, setCustomerForm] = useState<{ name: string; phone: string; address: string; debt: number }>({
+    name: "",
+    phone: "",
+    address: "",
+    debt: 0
+  });
+
+  // Modal for Thu nợ
+  const [isPayDebtModalOpen, setIsPayDebtModalOpen] = useState(false);
+  const [payDebtAmount, setPayDebtAmount] = useState(0);
+
+  // Pending Invoices State
+  const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+
   // POS State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [posSearch, setPosSearch] = useState("");
-  const [invoiceNo, setInvoiceNo] = useState("000000001");
-  const [customerName, setCustomerName] = useState("kim chung");
+  const [invoiceNo, setInvoiceNo] = useState(() => "HĐ-" + Math.floor(10000 + Math.random() * 90000));
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer>(() => {
+    return { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
+  });
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("Khách lẻ");
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [posNotes, setPosNotes] = useState("");
+  
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number } | null>(null);
@@ -91,9 +140,12 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (editingProduct || isSystemModalOpen) {
+        if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen) {
           setEditingProduct(null);
           setIsSystemModalOpen(false);
+          setIsCustomerModalOpen(false);
+          setIsPayDebtModalOpen(false);
+          setIsPendingModalOpen(false);
           return;
         }
         const now = Date.now();
@@ -109,6 +161,22 @@ function App() {
         }
         lastEscPress.current = now;
       }
+      if (e.key === 'F1') {
+        e.preventDefault();
+        handleSaveTemporary();
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        handleCheckout();
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        handleSellOnDebt();
+      }
+      if (e.key === 'F9') {
+        e.preventDefault();
+        setIsPendingModalOpen(true);
+      }
       if (e.key === 'Delete' && selectedCartIndex !== null && document.activeElement?.tagName !== 'INPUT') {
         setCart(prev => prev.filter((_, i) => i !== selectedCartIndex));
         setSelectedCartIndex(null);
@@ -116,7 +184,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCartIndex, editingProduct, isSystemModalOpen]);
+  }, [selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
 
   useEffect(() => {
     // Tạm thời nạp dữ liệu mẫu
@@ -226,19 +294,84 @@ function App() {
     setEditingProduct(null);
   };
 
+  const handleSaveTemporary = () => {
+    if (cart.length === 0) {
+      alert("Không có sản phẩm nào trong giỏ hàng để tạm lưu!");
+      return;
+    }
+    const newPending: PendingInvoice = {
+      invoiceNo,
+      dateTime: new Date().toLocaleString("vi-VN"),
+      customer: selectedCustomer,
+      items: [...cart],
+      notes: posNotes,
+    };
+    setPendingInvoices(prev => [...prev, newPending]);
+    alert(`Đã tạm lưu hóa đơn ${invoiceNo} thành công!`);
+    
+    // Reset POS
+    setCart([]);
+    setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
+    setSelectedCustomer(customers[0]);
+    setCustomerSearchQuery(customers[0].name);
+    setPosNotes("");
+    setSelectedCartIndex(null);
+  };
+
+  const handleSellOnDebt = () => {
+    if (cart.length === 0) {
+      alert("Không có sản phẩm nào trong giỏ hàng để ghi nợ!");
+      return;
+    }
+    if (selectedCustomer.id === '1') {
+      alert("Không thể ghi nợ cho Khách lẻ. Vui lòng chọn khách hàng cụ thể hoặc thêm khách hàng mới!");
+      return;
+    }
+    const totalToPay = getCartFinalTotal();
+    setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, debt: c.debt + totalToPay } : c));
+    setSelectedCustomer(prev => ({ ...prev, debt: prev.debt + totalToPay }));
+    alert(`Hóa đơn ${invoiceNo} bán nợ thành công cho ${selectedCustomer.name}.\nSố tiền ghi nợ: ${formatVND(totalToPay)}đ.\nCông nợ: ${formatVND(selectedCustomer.debt + totalToPay)}đ.`);
+    
+    // Reset POS
+    setCart([]);
+    setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
+    setSelectedCustomer(customers[0]);
+    setCustomerSearchQuery(customers[0].name);
+    setPosNotes("");
+    setSelectedCartIndex(null);
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      alert("Không có sản phẩm nào trong giỏ hàng để thanh toán!");
+      return;
+    }
+    const totalToPay = getCartFinalTotal();
+    alert(`Thanh toán hóa đơn ${invoiceNo} thành công (Tiền mặt).\nTổng tiền thực tế: ${formatVND(totalToPay)}đ.`);
+    
+    // Reset POS
+    setCart([]);
+    setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
+    setSelectedCustomer(customers[0]);
+    setCustomerSearchQuery(customers[0].name);
+    setPosNotes("");
+    setSelectedCartIndex(null);
+  };
+
   const updateCartItem = (index: number, field: 'quantity' | 'price' | 'discount', value: number) => {
-    if (field === 'quantity' && value <= 0) {
+    const cleanValue = Math.max(0, value);
+    if (field === 'quantity' && cleanValue <= 0) {
       setCart(prev => prev.filter((_, i) => i !== index));
       if (selectedCartIndex === index) setSelectedCartIndex(null);
       return;
     }
     const newCart = [...cart];
     if (field === 'quantity') {
-      newCart[index].quantity = value;
+      newCart[index].quantity = cleanValue;
     } else if (field === 'price') {
-      newCart[index].product = { ...newCart[index].product, price: value };
+      newCart[index].product = { ...newCart[index].product, price: cleanValue };
     } else if (field === 'discount') {
-      newCart[index].discount = value;
+      newCart[index].discount = Math.min(99, cleanValue);
     }
     setCart(newCart);
   };
@@ -253,29 +386,34 @@ function App() {
       <div className="menu-bar">
         <div className="menu-item" onClick={() => setActiveTab("pos")} style={{ fontWeight: activeTab === 'pos' ? 'bold' : 'normal' }}>Bán Hàng</div>
         <div className="menu-item" onClick={() => setActiveTab("inventory")} style={{ fontWeight: activeTab === 'inventory' ? 'bold' : 'normal' }}>Sản phẩm</div>
+        <div className="menu-item" onClick={() => setActiveTab("customers")} style={{ fontWeight: activeTab === 'customers' ? 'bold' : 'normal' }}>Khách hàng</div>
         <div style={{ flex: 1 }}></div>
+        
+        {activeTab === "pos" && (
+          <>
+            <div className="menu-item" onClick={handleSaveTemporary} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>💾</span>Tạm lưu(F1)
+            </div>
+            <div className="menu-item" onClick={handleSellOnDebt} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>📝</span>Bán nợ(F3)
+            </div>
+            <div className="menu-item" onClick={() => setIsPendingModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>📄</span>HĐ tạm lưu(F9)
+            </div>
+            <div style={{ width: '1px', backgroundColor: 'var(--border-light)', borderLeft: '1px solid var(--border-dark)', margin: '2px 6px' }}></div>
+          </>
+        )}
+
         <div className="menu-item" onClick={() => setIsSystemModalOpen(true)}>Hệ thống</div>
       </div>
 
       <div className="main-content">
         {activeTab === "pos" && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* POS Toolbar */}
-            <div className="toolbar">
-              <button className="tool-btn"><span className="tool-icon">💾</span>Tạm lưu(F1)</button>
-              <button className="tool-btn"><span className="tool-icon">💰</span>Thanh toán(F2)</button>
-              <button className="tool-btn"><span className="tool-icon">📝</span>Bán nợ(F3)</button>
-              <button className="tool-btn"><span className="tool-icon">🔙</span>Phiếu trả hàng</button>
-              <button className="tool-btn"><span className="tool-icon">📉</span>Giảm %(F5)</button>
-              <button className="tool-btn"><span className="tool-icon">💵</span>Giảm tiền(F6)</button>
-              <button className="tool-btn"><span className="tool-icon">👤</span>Khách hàng(F7)</button>
-              <button className="tool-btn"><span className="tool-icon">🤝</span>Đối tác(F8)</button>
-              <button className="tool-btn"><span className="tool-icon">📄</span>HĐ tạm lưu(F9)</button>
-            </div>
 
             {/* Top Section: Invoice Info */}
             <div className="pos-top-section" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '6px' }}>
-              <fieldset className="classic-fieldset" style={{ flex: '1.5 1 220px', minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '1 1 300px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <legend>Thông tin phiếu</legend>
                 <div className="form-row">
                   <span className="form-label-fixed">Số HĐ:</span>
@@ -288,30 +426,88 @@ function App() {
                 </div>
               </fieldset>
 
-              <fieldset className="classic-fieldset" style={{ flex: '3.5 1 350px', minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '2 1 500px', minWidth: '400px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <legend>Khách hàng & Ghi chú</legend>
                 <div className="form-row">
                   <span className="form-label-fixed">Khách hàng:</span>
-                  <input className="classic-input" value={customerName} onChange={e => setCustomerName(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
-                  <span className="form-label-fixed" style={{ minWidth: '45px' }}>Đối tác:</span>
+                  <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
+                    <input 
+                      className="classic-input" 
+                      style={{ flex: 1, minWidth: 0 }}
+                      value={customerSearchQuery}
+                      onFocus={(e) => {
+                        e.target.select();
+                        setIsCustomerDropdownOpen(true);
+                        setCustomerSearchQuery("");
+                      }}
+                      onChange={e => {
+                        setCustomerSearchQuery(e.target.value);
+                        setIsCustomerDropdownOpen(true);
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          setIsCustomerDropdownOpen(false);
+                          setCustomerSearchQuery(selectedCustomer.name);
+                        }, 200);
+                      }}
+                      placeholder="Tìm khách hàng..."
+                    />
+                    {isCustomerDropdownOpen && (
+                      <div className="classic-dropdown-list" style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: '#fff',
+                        border: '1.5px solid var(--border-dark)',
+                        zIndex: 1000,
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        boxShadow: '2px 2px 5px rgba(0,0,0,0.2)'
+                      }}>
+                        {customers.filter(c => {
+                          const query = removeAccents(customerSearchQuery.toLowerCase());
+                          return removeAccents(c.name.toLowerCase()).includes(query) || c.phone.includes(query);
+                        }).map(c => (
+                          <div 
+                            key={c.id} 
+                            className="dropdown-item" 
+                            style={{
+                              padding: '4px 6px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              fontSize: '11px',
+                              borderBottom: '1px solid #eee'
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setSelectedCustomer(c);
+                              setCustomerSearchQuery(c.name);
+                              setIsCustomerDropdownOpen(false);
+                            }}
+                          >
+                            <span>{c.name} {c.phone ? `(${c.phone})` : ''}</span>
+                            <span style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: 'bold' }}>
+                              Nợ: {formatVND(c.debt)}đ
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <span className="form-label-fixed" style={{ minWidth: '45px', marginLeft: '6px' }}>Đối tác:</span>
                   <input className="classic-input" value="Không có" readOnly style={{ width: '120px', minWidth: 0 }} />
                 </div>
                 <div className="form-row">
                   <span className="form-label-fixed">Ghi chú:</span>
-                  <input className="classic-input" style={{ flex: 1, minWidth: 0 }} />
-                </div>
-              </fieldset>
-
-              <fieldset className="classic-fieldset" style={{ flex: '2 1 180px', minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <legend>Khuyến mãi hóa đơn</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed">Giảm (%):</span>
-                  <input className="classic-input" value="0" style={{ width: '50px', textAlign: 'right', minWidth: 0 }} />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed">Giảm tiền:</span>
-                  <input className="classic-input" value="0" style={{ flex: 1, textAlign: 'right', minWidth: 0 }} />
-                  <span style={{ fontSize: '11px', marginLeft: '2px' }}>đ</span>
+                  <input 
+                    className="classic-input" 
+                    value={posNotes}
+                    onChange={e => setPosNotes(e.target.value)}
+                    onFocus={(e) => e.target.select()} 
+                    style={{ flex: 1, minWidth: 0 }} 
+                  />
                 </div>
               </fieldset>
             </div>
@@ -361,7 +557,8 @@ function App() {
                                 value={item.quantity}
                                 onChange={(e) => updateCartItem(idx, 'quantity', Number(e.target.value))}
                                 onMouseDown={(e) => e.stopPropagation()}
-                                onFocus={() => {
+                                onFocus={(e) => {
+                                  e.target.select();
                                   setSelectedProduct(item.product);
                                   setSelectedCartIndex(idx);
                                 }}
@@ -374,7 +571,8 @@ function App() {
                                 value={item.product.price}
                                 onChange={(e) => updateCartItem(idx, 'price', Number(e.target.value))}
                                 onMouseDown={(e) => e.stopPropagation()}
-                                onFocus={() => {
+                                onFocus={(e) => {
+                                  e.target.select();
                                   setSelectedProduct(item.product);
                                   setSelectedCartIndex(idx);
                                 }}
@@ -388,7 +586,8 @@ function App() {
                                 value={discount}
                                 onChange={(e) => updateCartItem(idx, 'discount', Number(e.target.value))}
                                 onMouseDown={(e) => e.stopPropagation()}
-                                onFocus={() => {
+                                onFocus={(e) => {
+                                  e.target.select();
                                   setSelectedProduct(item.product);
                                   setSelectedCartIndex(idx);
                                 }}
@@ -434,11 +633,20 @@ function App() {
                 {/* Totals Panel & Checkout */}
                 <div className="pos-totals-container">
                   <div className="pos-totals-panel">
-                    <div className="total-row"><span>TỔNG CỘNG</span><span>{formatVND(getCartBaseTotal())}</span></div>
-                    <div className="total-row" style={{ color: 'var(--text-red)' }}><span>GIẢM</span><span>{formatVND(getCartDiscountTotal())}</span></div>
-                    <div className="total-row" style={{ fontWeight: 'bold' }}><span>CÒN</span><span>{formatVND(getCartFinalTotal())}</span></div>
+                    <div className="total-row-sub">
+                      <span>Cộng tiền hàng</span>
+                      <span>{formatVND(getCartBaseTotal())}</span>
+                    </div>
+                    <div className="total-row-discount">
+                      <span>Giảm giá</span>
+                      <span>{getCartDiscountTotal() > 0 ? `-${formatVND(getCartDiscountTotal())}` : '0'}</span>
+                    </div>
+                    <div className="total-row-final">
+                      <span>Tổng cộng</span>
+                      <span>{formatVND(getCartFinalTotal())}</span>
+                    </div>
                   </div>
-                  <button className="checkout-btn">
+                  <button className="checkout-btn" onClick={handleCheckout}>
                     <span className="tool-icon" style={{ marginBottom: 0 }}>💰</span> Tính tiền (F2)
                   </button>
                 </div>
@@ -458,6 +666,7 @@ function App() {
                   style={{ flex: '1 1 200px', maxWidth: '300px', backgroundColor: '#ffe4e1', minWidth: 0 }}
                   value={posSearch}
                   onChange={e => setPosSearch(e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       handleSearchSubmit();
@@ -620,6 +829,122 @@ function App() {
             </div>
           </div>
         )}
+
+        {activeTab === "customers" && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* Customer Toolbar */}
+            <div className="toolbar">
+              <button className="tool-btn" onClick={() => {
+                setEditingCustomer(null);
+                setCustomerForm({ name: "", phone: "", address: "", debt: 0 });
+                setIsCustomerModalOpen(true);
+              }}><span className="tool-icon">➕</span>Thêm KH</button>
+              
+              <button className="tool-btn" onClick={() => {
+                if (selectedCustomerIdx === null) {
+                  alert("Vui lòng chọn khách hàng cần sửa!");
+                  return;
+                }
+                const cust = customers[selectedCustomerIdx];
+                if (cust.id === '1') {
+                  alert("Không thể sửa thông tin của Khách lẻ mặc định!");
+                  return;
+                }
+                setEditingCustomer(cust);
+                setCustomerForm({ name: cust.name, phone: cust.phone, address: cust.address, debt: cust.debt });
+                setIsCustomerModalOpen(true);
+              }}><span className="tool-icon">✏️</span>Sửa KH</button>
+              
+              <button className="tool-btn" onClick={() => {
+                if (selectedCustomerIdx === null) {
+                  alert("Vui lòng chọn khách hàng cần xóa!");
+                  return;
+                }
+                const cust = customers[selectedCustomerIdx];
+                if (cust.id === '1') {
+                  alert("Không thể xóa Khách lẻ mặc định!");
+                  return;
+                }
+                if (confirm(`Bạn có chắc chắn muốn xóa khách hàng "${cust.name}"?`)) {
+                  setCustomers(prev => prev.filter(c => c.id !== cust.id));
+                  setSelectedCustomerIdx(null);
+                }
+              }}><span className="tool-icon">❌</span>Xóa KH</button>
+
+              <div style={{ width: '1px', backgroundColor: 'var(--border-dark)', margin: '0 4px' }}></div>
+
+              <button className="tool-btn" onClick={() => {
+                if (selectedCustomerIdx === null) {
+                  alert("Vui lòng chọn khách hàng cần thu nợ!");
+                  return;
+                }
+                const cust = customers[selectedCustomerIdx];
+                if (cust.id === '1') {
+                  alert("Khách lẻ mặc định không có công nợ cần thu!");
+                  return;
+                }
+                if (cust.debt <= 0) {
+                  alert(`Khách hàng ${cust.name} hiện tại không có nợ.`);
+                  return;
+                }
+                setPayDebtAmount(cust.debt);
+                setIsPayDebtModalOpen(true);
+              }}><span className="tool-icon">💵</span>Thu nợ</button>
+
+              <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '4px' }}>
+                <span>Tìm kiếm:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ width: '150px' }} 
+                  value={customerSearch} 
+                  onChange={e => setCustomerSearch(e.target.value)} 
+                  placeholder="Tên hoặc SĐT..."
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+            </div>
+
+            {/* Customer Data Grid */}
+            <div className="grid-container" style={{ margin: '4px', flex: 1, overflowY: 'auto' }}>
+              <table className="data-grid">
+                <thead>
+                  <tr>
+                    <th style={{ width: '15%' }}>Mã KH</th>
+                    <th style={{ width: '25%' }}>Tên Khách Hàng</th>
+                    <th style={{ width: '20%' }}>Số điện thoại</th>
+                    <th style={{ width: '25%' }}>Địa chỉ</th>
+                    <th style={{ width: '15%' }}>Công nợ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.filter(c => {
+                    const query = removeAccents(customerSearch.toLowerCase());
+                    const nameNorm = removeAccents(c.name.toLowerCase());
+                    return nameNorm.includes(query) || c.phone.includes(query);
+                  }).map((c, idx) => (
+                    <tr 
+                      key={c.id} 
+                      className={selectedCustomerIdx === idx ? "selected-row" : ""}
+                      onClick={() => setSelectedCustomerIdx(idx)}
+                    >
+                      <td>KH-{c.id.padStart(4, '0')}</td>
+                      <td>{c.name}</td>
+                      <td>{c.phone}</td>
+                      <td>{c.address}</td>
+                      <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
+                        {formatVND(c.debt)}đ
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
+              Tổng số khách hàng: {customers.length}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status Bar */}
@@ -646,6 +971,7 @@ function App() {
                   style={{ flex: 1 }} 
                   value={editForm.sku} 
                   onChange={e => setEditForm({ ...editForm, sku: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
@@ -655,6 +981,7 @@ function App() {
                   style={{ flex: 1 }} 
                   value={editForm.name} 
                   onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
@@ -664,6 +991,7 @@ function App() {
                   style={{ flex: 1 }} 
                   value={editForm.unit} 
                   onChange={e => setEditForm({ ...editForm, unit: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
@@ -673,7 +1001,8 @@ function App() {
                   className="classic-input" 
                   style={{ flex: 1 }} 
                   value={editForm.price} 
-                  onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })} 
+                  onChange={e => setEditForm({ ...editForm, price: Math.max(0, Number(e.target.value)) })} 
+                  onFocus={(e) => e.target.select()}
                 />
               </div>
               
@@ -732,6 +1061,195 @@ function App() {
                 >
                   Hủy bỏ
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPendingModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '600px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Danh sách Hóa đơn tạm lưu</span>
+              <button className="dialog-close-btn" onClick={() => setIsPendingModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div className="grid-container" style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '8px' }}>
+                <table className="data-grid">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '15%' }}>Số HĐ</th>
+                      <th style={{ width: '25%' }}>Thời gian</th>
+                      <th style={{ width: '30%' }}>Khách hàng</th>
+                      <th style={{ width: '15%' }}>Số mặt hàng</th>
+                      <th style={{ width: '15%' }}>Trị giá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingInvoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center" style={{ padding: '8px' }}>Không có hóa đơn tạm lưu nào.</td>
+                      </tr>
+                    ) : (
+                      pendingInvoices.map((inv) => {
+                        const total = inv.items.reduce((sum, item) => {
+                          const amt = item.product.price * item.quantity;
+                          const disc = item.discount || 0;
+                          return sum + (amt - amt * (disc / 100));
+                        }, 0);
+                        return (
+                          <tr key={inv.invoiceNo} style={{ cursor: 'pointer' }} onClick={() => {
+                            setCart(inv.items);
+                            setInvoiceNo(inv.invoiceNo);
+                            setSelectedCustomer(inv.customer);
+                            setCustomerSearchQuery(inv.customer.name);
+                            setPosNotes(inv.notes);
+                            setPendingInvoices(prev => prev.filter(p => p.invoiceNo !== inv.invoiceNo));
+                            setIsPendingModalOpen(false);
+                            alert(`Đã tải lại hóa đơn ${inv.invoiceNo} thành công!`);
+                          }}>
+                            <td>{inv.invoiceNo}</td>
+                            <td>{inv.dateTime}</td>
+                            <td>{inv.customer.name}</td>
+                            <td className="text-center">{inv.items.length}</td>
+                            <td className="text-right">{formatVND(total)}đ</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="dialog-buttons">
+                <button className="classic-btn" onClick={() => setIsPendingModalOpen(false)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCustomerModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '320px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">{editingCustomer ? "Sửa Khách Hàng" : "Thêm Khách Hàng mới"}</span>
+              <button className="dialog-close-btn" onClick={() => setIsCustomerModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Họ tên:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={customerForm.name} 
+                  onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Điện thoại:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={customerForm.phone} 
+                  onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Địa chỉ:</span>
+                <input 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={customerForm.address} 
+                  onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Công nợ đầu:</span>
+                <input 
+                  type="number"
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={customerForm.debt} 
+                  onChange={e => setCustomerForm({ ...customerForm, debt: Math.max(0, Number(e.target.value)) })} 
+                  onFocus={(e) => e.target.select()}
+                  disabled={!!editingCustomer}
+                />
+              </div>
+              <div className="dialog-buttons">
+                <button className="classic-btn" onClick={() => {
+                  if (!customerForm.name.trim()) {
+                    alert("Tên khách hàng không được để trống!");
+                    return;
+                  }
+                  if (editingCustomer) {
+                    setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, name: customerForm.name, phone: customerForm.phone, address: customerForm.address } : c));
+                    alert(`Đã sửa thông tin khách hàng "${customerForm.name}" thành công.`);
+                  } else {
+                    const newId = (Math.max(...customers.map(c => Number(c.id))) + 1).toString();
+                    setCustomers(prev => [...prev, {
+                      id: newId,
+                      name: customerForm.name,
+                      phone: customerForm.phone,
+                      address: customerForm.address,
+                      debt: customerForm.debt
+                    }]);
+                    alert(`Đã thêm khách hàng "${customerForm.name}" thành công.`);
+                  }
+                  setIsCustomerModalOpen(false);
+                }}>Ghi lại</button>
+                <button className="classic-btn" onClick={() => setIsCustomerModalOpen(false)}>Hủy bỏ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPayDebtModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '280px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Thu nợ khách hàng</span>
+              <button className="dialog-close-btn" onClick={() => setIsPayDebtModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div style={{ fontSize: '11px', marginBottom: '8px' }}>
+                Khách hàng: <strong>{selectedCustomerIdx !== null && customers[selectedCustomerIdx] ? customers[selectedCustomerIdx].name : ""}</strong>
+              </div>
+              <div style={{ fontSize: '11px', marginBottom: '8px' }}>
+                Tổng công nợ: <strong>{selectedCustomerIdx !== null && customers[selectedCustomerIdx] ? formatVND(customers[selectedCustomerIdx].debt) : 0}đ</strong>
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Số tiền thu:</span>
+                <input 
+                  type="number"
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={payDebtAmount} 
+                  onChange={e => setPayDebtAmount(Math.max(0, Number(e.target.value)))} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className="dialog-buttons">
+                <button className="classic-btn" onClick={() => {
+                  if (selectedCustomerIdx === null || !customers[selectedCustomerIdx]) return;
+                  const cust = customers[selectedCustomerIdx];
+                  if (payDebtAmount <= 0) {
+                    alert("Số tiền thu nợ phải lớn hơn 0!");
+                    return;
+                  }
+                  if (payDebtAmount > cust.debt) {
+                    alert(`Số tiền thu nợ (${formatVND(payDebtAmount)}đ) không được vượt quá số nợ hiện tại (${formatVND(cust.debt)}đ)!`);
+                    return;
+                  }
+                  setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: c.debt - payDebtAmount } : c));
+                  alert(`Đã thu nợ ${formatVND(payDebtAmount)}đ của khách hàng ${cust.name} thành công. Công nợ còn lại: ${formatVND(cust.debt - payDebtAmount)}đ.`);
+                  setIsPayDebtModalOpen(false);
+                }}>Xác nhận</button>
+                <button className="classic-btn" onClick={() => setIsPayDebtModalOpen(false)}>Hủy bỏ</button>
               </div>
             </div>
           </div>

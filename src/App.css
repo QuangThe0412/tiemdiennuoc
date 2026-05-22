@@ -378,6 +378,35 @@ input, select, button {
   font-size: 14px;
 }
 
+.total-row-sub {
+  display: flex;
+  justify-content: space-between;
+  font-weight: normal;
+  color: var(--text-main);
+  font-size: 12px;
+  border-bottom: 1px dotted #ccc;
+  padding-bottom: 4px;
+}
+
+.total-row-discount {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  color: var(--text-blue);
+  font-size: 12px;
+  border-bottom: 1px dotted #ccc;
+  padding-bottom: 4px;
+}
+
+.total-row-final {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  color: var(--text-red);
+  font-size: 15px;
+  padding-top: 4px;
+}
+
 .pos-bottom-section {
   flex: 1;
   display: flex;
@@ -515,4 +544,20 @@ input, select, button {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 6px;
+}
+
+.dropdown-item:hover {
+  background-color: #000080 !important;
+  color: #fff !important;
+}
+.dropdown-item:hover span {
+  color: #fff !important;
+}
+
+.selected-row {
+  background-color: #000080 !important;
+  color: #fff !important;
+}
+.selected-row td {
+  color: #fff !important;
 }

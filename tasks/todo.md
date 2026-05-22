@@ -127,3 +127,40 @@ Dựa trên yêu cầu và hình ảnh cung cấp, ứng dụng sẽ được đ
 - [x] Hiển thị số tiền được giảm của từng item bằng công thức `amount * (discount / 100)`.
 - [x] Cập nhật hàng trống phụ mô phỏng (empty rows) thêm một thẻ `td` để không lệch cột.
 - [x] Cập nhật Panel tổng cộng: Xóa bỏ dòng `ĐÃ GỒM VAT`, hiển thị đúng giá trị `TỔNG CỘNG`, `GIẢM`, và `CÒN`.
+
+## Giai đoạn 23: Tinh giản Toolbar & Loại bỏ Khuyến mãi Hóa đơn
+- [x] Cập nhật Toolbar trong `App.tsx`: Gỡ bỏ các nút "Thanh toán(F2)", "Phiếu trả hàng", "Giảm %(F5)", "Giảm tiền(F6)", "Khách hàng(F7)", "Đối tác(F8)". Chỉ giữ lại "Tạm lưu(F1)", "Bán nợ(F3)", và "HĐ tạm lưu(F9)".
+- [x] Loại bỏ nhóm fieldset "Khuyến mãi hóa đơn" trong `pos-top-section`.
+- [x] Căn chỉnh lại `flex` và `minWidth` của hai fieldset còn lại để phủ đều phần trống trên cùng.
+
+## Giai đoạn 24: Di chuyển các nút Action lên Menu Bar nằm cạnh Hệ thống
+- [x] Gỡ bỏ hoàn toàn thẻ `.toolbar` khỏi khu vực bán hàng (`App.tsx`).
+- [x] Di chuyển 3 nút "Tạm lưu(F1)", "Bán nợ(F3)", "HĐ tạm lưu(F9)" lên `.menu-bar`.
+- [x] Thiết kế chúng dưới dạng `.menu-item` kèm icon và tên để đồng bộ với menu hệ thống.
+- [x] Bổ sung thanh phân tách đứng giữa các nút chức năng này và mục "Hệ thống".
+
+## Giai đoạn 25: Tối ưu hóa UI Panel Tổng cộng (Visual Hierarchy)
+- [x] Định nghĩa các class CSS mới trong `App.css`: `.total-row-sub` (cộng tiền hàng), `.total-row-discount` (giảm giá), và `.total-row-final` (tổng cộng) với kiểu dáng phân cấp rõ ràng.
+- [x] Cập nhật cấu trúc HTML của Totals Panel trong `App.tsx` để sử dụng các class CSS mới này.
+- [x] Chuyển nhãn hàng đầu tiên thành "Cộng tiền hàng".
+- [x] Thêm tiền tố dấu trừ `-` trước số tiền chiết khấu trong dòng Giảm giá.
+- [x] Thay đổi nhãn dòng cuối cùng thành "Tổng cộng".
+
+## Giai đoạn 26: Trải nghiệm Nhập liệu POS - Bôi đen thông minh & Giới hạn giá trị
+- [x] Cập nhật CSS trong `App.css`: Chuyển màu chữ của `.total-row-discount` thành màu xanh lam (`var(--text-blue)`) và `.total-row-final` thành màu đỏ (`var(--text-red)`).
+- [x] Cập nhật hàm `updateCartItem` trong `App.tsx`: Ngăn chặn số âm (`Math.max(0, value)`) cho tất cả thay đổi, đồng thời khống chế khuyến mãi (`Km%`) tối đa là 99.
+- [x] Thêm sự kiện `onFocus={(e) => e.target.select()}` cho tất cả các ô nhập liệu số và văn bản có thể sửa đổi để tự động bôi đen toàn bộ ký tự khi focus.
+
+## Giai đoạn 27: Hoàn thiện logic Tạm lưu, Bán nợ, Khách hàng & Dropdown Search
+- [x] Tạo các interface `Customer` và `PendingInvoice` lưu trữ cấu trúc dữ liệu khách hàng & hóa đơn tạm lưu.
+- [x] Cập nhật Tab Menu Bar: Thêm tab "Khách hàng" bên cạnh tab "Sản phẩm", thay đổi kiểu dữ liệu `activeTab` để cho phép hiển thị tab mới.
+- [x] Tạo bộ lọc tìm kiếm khách hàng dạng dropdown có thể search tại POS. Khi click chọn, cập nhật thông tin khách hàng và tự động cập nhật text ô nhập.
+- [x] Triển khai tab quản lý "Khách hàng" với đầy đủ bảng thông tin và toolbar Win95: Thêm KH, Sửa KH, Xóa KH, Thu nợ khách hàng (cập nhật số dư nợ).
+- [x] Thực thi đầy đủ phím tắt phím chức năng F1 (Tạm lưu hóa đơn), F3 (Bán nợ), F9 (Xem hóa đơn tạm lưu) và F2 (Thanh toán).
+- [x] Cài đặt ESC lắng nghe thông minh cho tất cả các modal overlay mới để đóng khi người dùng nhấn thoát.
+
+## Giai đoạn 28: Review Hóa đơn & Nút Thanh Toán (Tính tiền)
+- [ ] Chuyển chức năng "Tính tiền (F2)" từ alert mặc định sang một Modal "Review hóa đơn".
+- [ ] Hiển thị đầy đủ thông tin hóa đơn chuẩn bị thanh toán (Khách hàng, Danh sách mặt hàng, Tổng tiền, Giảm giá, Tổng thanh toán).
+- [ ] Thiết kế các nút chức năng trong hộp thoại: "In" (Thanh toán và In hóa đơn), "Đóng" (Quay lại chỉnh sửa), và "Hủy" (Hủy bỏ hóa đơn hiện tại và dọn sạch giỏ hàng).
+- [ ] Tích hợp phím ESC để đóng Modal Checkout này.
