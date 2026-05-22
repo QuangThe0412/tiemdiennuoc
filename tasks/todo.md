@@ -26,3 +26,63 @@ Dựa trên yêu cầu và hình ảnh cung cấp, ứng dụng sẽ được đ
 
 ---
 **Trạng thái:** Đã hoàn thành bộ khung giao diện và chuẩn bị Backend. Sẵn sàng nhận thông tin IP và Password để kết nối SQL.
+
+## Giai đoạn 5: Chỉnh sửa Giao diện (UI Tweaks)
+- [x] Chuyển group tính toán (Tổng cộng, Giảm, Còn, Đã gồm VAT) xuống nằm chung hàng với lưới Mặt hàng được chọn.
+- [x] Khu vực cũ của group tính toán thay bằng Image panel.
+- [x] Cập nhật kiểu dữ liệu `Product` thêm trường `link` để hiển thị ảnh. Nếu không có `link`, hiển thị ảnh mặc định là dấu X màu đỏ ở giữa.
+- [x] Thêm cột "Xóa" sau cột VAT ở lưới mặt hàng được chọn để xóa dòng.
+- [x] Thêm nút "Tính tiền" (Checkout) ở dưới group tính toán.
+- [x] Xóa cột VAT%.
+- [x] Cho phép chỉnh sửa số lượng, đơn giá, KM% trực tiếp trên lưới mặt hàng được chọn.
+- [x] Tô màu nền xám nhẹ cho các cột không được phép chỉnh sửa để dễ phân biệt.
+
+## Giai đoạn 6: Tinh chỉnh Layout & Phím tắt
+- [x] Chuyển Image Panel xuống phần danh sách mặt hàng chưa chọn (bottom grid).
+- [x] Căn lề nút Tính tiền xuống sát đáy (bottom) của khung chứa.
+- [x] Dọn dẹp thanh Search: Bỏ text, input SL(F11), bỏ checkbox Nhập đơn giá, bỏ nút Sửa số lượng.
+- [x] Thêm logic nhấn ESC để focus tự động vào ô Search Mã/tên.
+
+## Giai đoạn 7: Tùy chỉnh kích thước và vị trí Grid & Image
+- [x] Tăng chiều cao lưới Mặt hàng được chọn và thêm tính năng kéo thả (resize vertical) để điều chỉnh độ cao linh hoạt.
+- [x] Chuyển Image Panel sang bên phải của lưới tìm kiếm mặt hàng (bottom grid).
+- [x] Thiết lập Image Panel co giãn theo chiều cao với min-width cố định.
+
+## Giai đoạn 8: Thanh kéo thả (Splitter) chia vùng
+- [x] Xóa bỏ CSS `resize: vertical` cũ vì chỉ có handle nhỏ.
+- [x] Thêm một thanh kéo ngang (resizer) giữa lưới trên và lưới dưới.
+- [x] Cài đặt logic kéo thả (drag & drop) bằng React để thay đổi chiều cao mượt mà.
+
+## Giai đoạn 9: Cải thiện Trải nghiệm Chọn & Hiển thị Item
+- [x] Thêm tính năng quét khối chọn nhiều dòng (multi-select) và highlight dòng đã chọn ở lưới Mặt hàng đã chọn.
+- [x] Hiển thị tên của item đang chọn ở dưới phần Image Panel.
+- [x] Đồng bộ chọn Item: Bất kể click ở lưới trên hay dưới đều hiển thị đúng ảnh và tên của item đó.
+
+## Giai đoạn 10: Tinh chỉnh Thao tác & Xóa Mặt hàng
+- [x] Khắc phục lỗi màu text bị chìm (khó nhìn) ở các ô readonly khi dòng được highlight.
+- [x] Hủy bỏ logic quét khối chọn nhiều mặt hàng, chỉ giữ lại chọn 1 mặt hàng (single select).
+- [x] Thêm logic tự động xóa mặt hàng khỏi giỏ: Nhấn phím Delete hoặc khi sửa số lượng về 0.
+
+## Giai đoạn 11: Cải thiện Search & Header
+- [x] Hỗ trợ phím Enter: Nhấn Enter tại ô Search (phục vụ quét mã vạch) hoặc tại dòng tìm kiếm sẽ tự động thêm mặt hàng vào giỏ.
+- [x] Mở rộng ô search "Mã/tên" và cho phép tìm kiếm theo cả mã SKU lẫn Tên.
+- [x] Bổ sung các cột Header còn thiếu ở phần mặt hàng đã chọn (Mã Hàng, ĐVT).
+
+## Giai đoạn 12: Tìm kiếm tiếng Việt không dấu (Accent-insensitive)
+- [x] Thêm hàm tiện ích `removeAccents` để chuẩn hóa chuỗi tiếng Việt.
+- [x] Cập nhật bộ lọc tìm kiếm tại ô nhập POS và bảng kết quả khớp cả khi không gõ dấu.
+- [x] Cập nhật bộ lọc tìm kiếm tương tự cho phần Danh mục sản phẩm (Inventory).
+
+## Giai đoạn 13: Cải tiến phím ESC & nút Tìm kiếm
+- [x] Thiết lập logic lắng nghe ESC nâng cao:
+  - Lần nhấn ESC thứ nhất: Focus ô Search, nếu đã có text thì tiến hành bôi đen (select).
+  - Lần nhấn ESC thứ hai liên tiếp (trong 500ms): Clear dữ liệu ô Search.
+- [x] Thêm nút "Tìm" kiểu Win95 bên cạnh ô Search.
+
+## Giai đoạn 14: Định dạng nút Tìm kiếm (.classic-btn)
+- [x] Tạo class `.classic-btn` kiểu nổi 3D cổ điển trong `App.css`.
+- [x] Áp dụng class `.classic-btn` cho nút "Tìm" trong `App.tsx`.
+
+## Giai đoạn 15: Thiết kế lại Khu vực Thông tin Hóa đơn (Top section)
+- [x] Thêm các class `.classic-fieldset` và `.form-label-fixed` vào `App.css`.
+- [x] Thay thế panel hóa đơn cũ bằng 3 fieldset chia cột logic: Thông tin phiếu, Khách hàng & Ghi chú, và Khuyến mãi hóa đơn.

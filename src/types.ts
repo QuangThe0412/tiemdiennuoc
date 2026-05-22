@@ -7,11 +7,13 @@ export interface Product {
   cost: number;
   stock: number;
   unit: string;
+  link?: string;
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
+  discount?: number;
 }
 
 export interface InvoiceItem {
