@@ -506,10 +506,64 @@ function App() {
     return getCartBaseTotal() - getCartDiscountTotal();
   };
 
-  const updateProductField = useCallback((productId: string, field: keyof Product, value: any) => {
+  const saveProductToDbOnly = useCallback((p: Product) => {
+    if (mssqlServer && mssqlUser) {
+      tauriInvoke("save_product_db", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass,
+        product: JSON.stringify({
+          id: Number(p.id) || 0,
+          sku: p.sku,
+          name: p.name,
+          unit: p.unit,
+          price: p.price,
+          price2: 0,
+          cost: 0,
+          stock: p.stock,
+          available: p.available !== false,
+          link: p.link || ""
+        })
+      }).catch((err: any) => {
+        console.error("Lỗi khi lưu mặt hàng: " + err.toString());
+      });
+    }
+  }, [mssqlServer, mssqlUser, mssqlDbName, mssqlPass]);
+
+  const saveCustomerToDbOnly = useCallback((c: Customer) => {
+    if (mssqlServer && mssqlUser) {
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      tauriInvoke("save_customer_db", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass,
+        customer: JSON.stringify({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          address: c.address,
+          debt: c.debt
+        }),
+        month,
+        year
+      }).catch((err: any) => {
+        console.error("Lỗi khi lưu khách hàng: " + err.toString());
+      });
+    }
+  }, [mssqlServer, mssqlUser, mssqlDbName, mssqlPass]);
+
+  const updateProductField = useCallback((productId: string, field: keyof Product, value: any, saveToDb = false) => {
     setProducts(prev => prev.map(p => {
       if (p.id === productId) {
-        return { ...p, [field]: value };
+        const updated = { ...p, [field]: value };
+        if (saveToDb) {
+          saveProductToDbOnly(updated);
+        }
+        return updated;
       }
       return p;
     }));
@@ -519,7 +573,20 @@ function App() {
       }
       return prevSel;
     });
-  }, []);
+  }, [saveProductToDbOnly]);
+
+  const updateCustomerField = useCallback((customerId: string, field: keyof Customer, value: any, saveToDb = false) => {
+    setCustomers(prev => prev.map(c => {
+      if (c.id === customerId) {
+        const updated = { ...c, [field]: value };
+        if (saveToDb) {
+          saveCustomerToDbOnly(updated);
+        }
+        return updated;
+      }
+      return c;
+    }));
+  }, [saveCustomerToDbOnly]);
 
   const handleAddUnitInline = () => {
     if (!newUnitName || !newUnitName.trim()) {
@@ -1579,6 +1646,7 @@ function App() {
                                 style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
                                 value={p.link || ""}
                                 onChange={e => updateProductField(p.id, 'link', e.target.value)}
+                                onBlur={e => updateProductField(p.id, 'link', e.target.value, true)}
                                 onClick={e => e.stopPropagation()}
                                 placeholder="URL ảnh"
                               />
@@ -1589,6 +1657,7 @@ function App() {
                                 style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
                                 value={p.sku}
                                 onChange={e => updateProductField(p.id, 'sku', e.target.value)}
+                                onBlur={e => updateProductField(p.id, 'sku', e.target.value, true)}
                                 onClick={e => e.stopPropagation()}
                               />
                             </td>
@@ -1598,6 +1667,7 @@ function App() {
                                 style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
                                 value={p.name}
                                 onChange={e => updateProductField(p.id, 'name', e.target.value)}
+                                onBlur={e => updateProductField(p.id, 'name', e.target.value, true)}
                                 onClick={e => e.stopPropagation()}
                               />
                             </td>
@@ -1606,7 +1676,7 @@ function App() {
                                 className="classic-input"
                                 style={{ width: '100%', height: '22px', padding: '0 2px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
                                 value={p.unit}
-                                onChange={e => updateProductField(p.id, 'unit', e.target.value)}
+                                onChange={e => updateProductField(p.id, 'unit', e.target.value, true)}
                                 onClick={e => e.stopPropagation()}
                               >
                                 {units.map(u => (
@@ -1624,6 +1694,12 @@ function App() {
                                   const val = Number(e.target.value);
                                   if (val >= 0) {
                                     updateProductField(p.id, 'price', val);
+                                  }
+                                }}
+                                onBlur={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'price', val, true);
                                   }
                                 }}
                                 onClick={e => e.stopPropagation()}
@@ -1651,7 +1727,7 @@ function App() {
                             type="checkbox"
                             style={{ cursor: 'pointer' }}
                             checked={p.available !== false}
-                            onChange={e => updateProductField(p.id, 'available', e.target.checked)}
+                            onChange={e => updateProductField(p.id, 'available', e.target.checked, true)}
                             onClick={e => e.stopPropagation()}
                           />
                         </td>
@@ -1666,6 +1742,12 @@ function App() {
                                 const val = Number(e.target.value);
                                 if (val >= 0) {
                                   updateProductField(p.id, 'stock', val);
+                                }
+                              }}
+                              onBlur={e => {
+                                const val = Number(e.target.value);
+                                if (val >= 0) {
+                                  updateProductField(p.id, 'stock', val, true);
                                 }
                               }}
                               onClick={e => e.stopPropagation()}
@@ -1728,52 +1810,7 @@ function App() {
                 setIsCustomerModalOpen(true);
               }}><span className="tool-icon">➕</span>Thêm KH</button>
               
-              <button className="tool-btn" onClick={() => {
-                if (selectedCustomerIdx === null) {
-                  alert("Vui lòng chọn khách hàng cần sửa!");
-                  return;
-                }
-                const cust = customers[selectedCustomerIdx];
-                if (cust.id === '1') {
-                  alert("Không thể sửa thông tin của Khách lẻ mặc định!");
-                  return;
-                }
-                setEditingCustomer(cust);
-                setCustomerForm({ name: cust.name, phone: cust.phone, address: cust.address, debt: cust.debt });
-                setIsCustomerModalOpen(true);
-              }}><span className="tool-icon">✏️</span>Sửa KH</button>
-              
-              <button className="tool-btn" onClick={async () => {
-                if (selectedCustomerIdx === null) {
-                  alert("Vui lòng chọn khách hàng cần xóa!");
-                  return;
-                }
-                const cust = customers[selectedCustomerIdx];
-                if (cust.id === '1') {
-                  alert("Không thể xóa Khách lẻ mặc định!");
-                  return;
-                }
-                if (confirm(`Bạn có chắc chắn muốn xóa khách hàng "${cust.name}"?`)) {
-                  if (mssqlServer && mssqlUser) {
-                    try {
-                      await tauriInvoke("delete_customer_db", {
-                        server: mssqlServer,
-                        dbName: mssqlDbName,
-                        user: mssqlUser,
-                        pass: mssqlPass,
-                        id: Number(cust.id) || 0
-                      });
-                    } catch (err: any) {
-                      alert("Lỗi khi xóa khách hàng từ CSDL: " + err.toString());
-                      return;
-                    }
-                  }
-                  setCustomers(prev => prev.filter(c => c.id !== cust.id));
-                  setSelectedCustomerIdx(null);
-                }
-              }}><span className="tool-icon">❌</span>Xóa KH</button>
 
-              <div style={{ width: '1px', backgroundColor: 'var(--border-dark)', margin: '0 4px' }}></div>
 
               <button className="tool-btn" onClick={() => {
                 if (selectedCustomerIdx === null) {
@@ -1840,29 +1877,123 @@ function App() {
               <table className="data-grid">
                 <thead>
                   <tr>
-                    <th style={{ width: '15%' }}>Mã KH</th>
-                    <th style={{ width: '25%' }}>Tên Khách Hàng</th>
-                    <th style={{ width: '20%' }}>Số điện thoại</th>
-                    <th style={{ width: '25%' }}>Địa chỉ</th>
-                    <th style={{ width: '15%' }}>Công nợ</th>
+                    <th style={{ width: '10%' }}>Mã KH</th>
+                    <th style={{ width: '30%' }}>Tên Khách Hàng</th>
+                    <th style={{ width: '18%' }}>Số điện thoại</th>
+                    <th style={{ width: '27%' }}>Địa chỉ</th>
+                    <th style={{ width: '10%' }}>Công nợ</th>
+                    <th style={{ width: '5%', textAlign: 'center' }}>Xóa</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCustomers.slice(0, customerLimit).map((c) => {
                     const globalIdx = customers.findIndex(cust => cust.id === c.id);
+                    const isSelected = selectedCustomerIdx === globalIdx && c.id !== '1';
                     return (
                       <tr 
                         key={c.id} 
                         data-customer-row="true"
                         className={selectedCustomerIdx === globalIdx ? "selected-row" : ""}
                         onClick={() => setSelectedCustomerIdx(globalIdx)}
+                        style={{ cursor: 'pointer' }}
                       >
                         <td>KH-{c.id.padStart(4, '0')}</td>
-                        <td>{c.name}</td>
-                        <td>{c.phone}</td>
-                        <td>{c.address}</td>
-                        <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
-                          {formatVND(c.debt)}đ
+                        {isSelected ? (
+                          <>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={c.name}
+                                onChange={e => updateCustomerField(c.id, 'name', e.target.value)}
+                                onBlur={e => updateCustomerField(c.id, 'name', e.target.value, true)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={c.phone}
+                                onChange={e => updateCustomerField(c.id, 'phone', e.target.value)}
+                                onBlur={e => updateCustomerField(c.id, 'phone', e.target.value, true)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                value={c.address}
+                                onChange={e => updateCustomerField(c.id, 'address', e.target.value)}
+                                onBlur={e => updateCustomerField(c.id, 'address', e.target.value, true)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                type="number"
+                                className="classic-input text-right"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000', fontWeight: 'bold' }}
+                                value={c.debt}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateCustomerField(c.id, 'debt', val);
+                                  }
+                                }}
+                                onBlur={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateCustomerField(c.id, 'debt', val, true);
+                                  }
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td>{c.name}</td>
+                            <td>{c.phone}</td>
+                            <td>{c.address}</td>
+                            <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
+                              {formatVND(c.debt)}đ
+                            </td>
+                          </>
+                        )}
+                        <td className="text-center" style={{ padding: '2px 0' }}>
+                          <button
+                            className="classic-btn"
+                            style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (c.id === '1') {
+                                alert("Không thể xóa Khách lẻ mặc định!");
+                                return;
+                              }
+                              if (confirm(`Bạn có chắc chắn muốn xóa khách hàng "${c.name}"?`)) {
+                                if (mssqlServer && mssqlUser) {
+                                  try {
+                                    await tauriInvoke("delete_customer_db", {
+                                      server: mssqlServer,
+                                      dbName: mssqlDbName,
+                                      user: mssqlUser,
+                                      pass: mssqlPass,
+                                      id: Number(c.id) || 0
+                                    });
+                                  } catch (err: any) {
+                                    alert("Lỗi khi xóa khách hàng từ CSDL: " + err.toString());
+                                    return;
+                                  }
+                                }
+                                setCustomers(prev => prev.filter(cust => cust.id !== c.id));
+                                setSelectedCustomerIdx(null);
+                              }
+                            }}
+                          >
+                            Xóa
+                          </button>
                         </td>
                       </tr>
                     );
