@@ -47,6 +47,59 @@ const tauriInvoke = async (cmd: string, args: any = {}): Promise<any> => {
     document.body.removeChild(link);
     return `Thư mục tải xuống của Trình duyệt (${args.fileName})`;
   }
+  if (cmd === "fetch_invoices_db") {
+    const mockInvoices = [
+      {
+        IDHoaDon: 101,
+        MaHoaDon: "HD-83921",
+        NgayHDStr: "2026-05-22",
+        GioHDStr: "15:30:00",
+        PTKhuyenMai: 0.0,
+        TienKhuyenMai: 0.0,
+        GhiChu: "Giao hàng tận nơi",
+        IDKhachHang: 1,
+        TenKhachHang: "Nguyễn Văn A",
+        DienThoaiKH: "0909123456",
+        TongTien: 450000.0
+      },
+      {
+        IDHoaDon: 102,
+        MaHoaDon: "HD-48210",
+        NgayHDStr: "2026-05-23",
+        GioHDStr: "10:15:00",
+        PTKhuyenMai: 5.0,
+        TienKhuyenMai: 25000.0,
+        GhiChu: "Mua trực tiếp tại quầy",
+        IDKhachHang: 2,
+        TenKhachHang: "Khách lẻ",
+        DienThoaiKH: "",
+        TongTien: 500000.0
+      }
+    ];
+    // Filter the mock data
+    const filtered = mockInvoices.filter(h => {
+      const matchCust = !args.customerQuery || h.TenKhachHang.toLowerCase().includes(args.customerQuery.toLowerCase());
+      const matchDate = h.NgayHDStr >= args.fromDate && h.NgayHDStr <= args.toDate;
+      return matchCust && matchDate;
+    });
+    return JSON.stringify(filtered);
+  }
+  if (cmd === "fetch_invoice_details_db") {
+    const mockDetails: Record<number, any[]> = {
+      101: [
+        { id: 1, productId: 1, productName: "Ổ cắm điện Lioa 4 lỗ", unit: "Cái", quantity: 2, price: 150000, discount: 0, total: 300000 },
+        { id: 2, productId: 2, productName: "Dây điện Cadivi 2.5", unit: "Mét", quantity: 15, price: 10000, discount: 0, total: 150000 }
+      ],
+      102: [
+        { id: 3, productId: 3, productName: "Bóng đèn LED Philips 12W", unit: "Cái", quantity: 5, price: 100000, discount: 5, total: 475000 }
+      ]
+    };
+    return JSON.stringify(mockDetails[args.invoiceId] || []);
+  }
+  if (cmd === "save_invoice_db") {
+    console.log("Mock saved invoice:", args);
+    return Math.floor(100 + Math.random() * 900);
+  }
   return null;
 };
 
@@ -74,7 +127,31 @@ interface PendingInvoice {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<"pos" | "inventory" | "customers">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "inventory" | "customers" | "invoices">("pos");
+
+  // Invoices State
+  const getFirstDayOfMonthStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const [invoiceFromDate, setInvoiceFromDate] = useState(getFirstDayOfMonthStr());
+  const [invoiceToDate, setInvoiceToDate] = useState(getTodayStr());
+  const [invoiceCustomerQuery, setInvoiceCustomerQuery] = useState("");
+  const [invoiceCodeQuery, setInvoiceCodeQuery] = useState("");
+  const [invoicesList, setInvoicesList] = useState<any[]>([]);
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState<any[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [printJob, setPrintJob] = useState<any | null>(null);
+  const [invoiceDetailWidth, setInvoiceDetailWidth] = useState(580);
+  const [isDraggingInvWidth, setIsDraggingInvWidth] = useState(false);
+  const dragStartInvX = useRef(0);
+  const dragStartInvWidth = useRef(580);
 
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
@@ -177,6 +254,9 @@ function App() {
   const [mssqlTestResult, setMssqlTestResult] = useState<{ success: boolean; msg: string } | null>(null);
   const [configFilePath, setConfigFilePath] = useState("");
   const [dbLocked, setDbLocked] = useState(true);
+  const [shopName, setShopName] = useState("Điện nước Tâm Nhi");
+  const [shopAddress, setShopAddress] = useState("Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM");
+  const [shopPhone, setShopPhone] = useState("0908 123 456");
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -298,6 +378,9 @@ function App() {
     };
   }, [isDragging, zoom]);
 
+  // refreshRef allows keydown effect to call refresh without circular dep ordering
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -363,6 +446,11 @@ function App() {
         }
       }
       
+      if (e.key === 'F5') {
+        e.preventDefault();
+        refreshRef.current();
+      }
+
       if (activeTab === 'pos') {
         if (e.key === 'F1') {
           e.preventDefault();
@@ -389,7 +477,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, productToDelete, imageEditProduct]);
-
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
     const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
     if (!serverVal || !userVal) {
@@ -435,6 +522,145 @@ function App() {
     }
   };
 
+  const loadInvoicesFromDB = useCallback(async () => {
+    if (!mssqlServer) return;
+    setLoadingInvoices(true);
+    try {
+      const dataStr = await tauriInvoke("fetch_invoices_db", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass,
+        fromDate: invoiceFromDate,
+        toDate: invoiceToDate,
+        customerQuery: invoiceCustomerQuery,
+        invoiceCodeQuery: invoiceCodeQuery
+      });
+      const data = JSON.parse(dataStr);
+      setInvoicesList(data);
+    } catch (err: any) {
+      console.error(err);
+      showAlert("Lỗi khi tải danh sách hóa đơn từ CSDL: " + err.toString(), "Lỗi", "error");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [mssqlServer, mssqlDbName, mssqlUser, mssqlPass, invoiceFromDate, invoiceToDate, invoiceCustomerQuery, invoiceCodeQuery, showAlert]);
+
+  const loadInvoiceDetailsFromDB = useCallback(async (invoiceId: number) => {
+    try {
+      const dataStr = await tauriInvoke("fetch_invoice_details_db", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass,
+        invoiceId: invoiceId
+      });
+      const data = JSON.parse(dataStr);
+      setSelectedInvoiceDetails(data);
+    } catch (err: any) {
+      console.error(err);
+      showAlert("Lỗi khi tải chi tiết hóa đơn: " + err.toString(), "Lỗi", "error");
+    }
+  }, [mssqlServer, mssqlDbName, mssqlUser, mssqlPass, showAlert]);
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (activeTab === 'invoices') {
+        await loadInvoicesFromDB();
+      } else {
+        await loadDataFromMSSQL();
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeTab, isRefreshing, loadInvoicesFromDB]);
+
+  // Keep ref in sync so keydown effect can call refresh without it being in dep array
+  useEffect(() => {
+    refreshRef.current = handleRefresh;
+  }, [handleRefresh]);
+
+  const handleReprint = useCallback(() => {
+    if (!selectedInvoice) return;
+    const baseTotal = selectedInvoiceDetails.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemDiscountTotal = selectedInvoiceDetails.reduce((sum, item) => sum + (item.price * item.quantity * (item.discount || 0) / 100), 0);
+    const invoiceDiscountAmt = selectedInvoice.TienKhuyenMai || 0;
+    const finalTotal = selectedInvoice.TongTien;
+
+    setPrintJob({
+      invoiceNo: selectedInvoice.MaHoaDon,
+      dateTimeStr: `${selectedInvoice.NgayHDStr} ${selectedInvoice.GioHDStr}`,
+      customerName: selectedInvoice.TenKhachHang,
+      customerPhone: selectedInvoice.DienThoaiKH,
+      notes: selectedInvoice.GhiChu,
+      items: selectedInvoiceDetails.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+        discount: item.discount,
+        total: item.total
+      })),
+      baseTotal: baseTotal,
+      discountTotal: itemDiscountTotal + invoiceDiscountAmt,
+      finalTotal: finalTotal,
+      invoiceDiscountPercent: selectedInvoice.PTKhuyenMai
+    });
+  }, [selectedInvoice, selectedInvoiceDetails]);
+
+  useEffect(() => {
+    if (printJob) {
+      const timer = setTimeout(() => {
+        window.print();
+        setPrintJob(null);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [printJob]);
+
+  const handleMouseDownInvWidth = (e: React.MouseEvent) => {
+    setIsDraggingInvWidth(true);
+    dragStartInvX.current = e.clientX;
+    dragStartInvWidth.current = invoiceDetailWidth;
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingInvWidth) return;
+      const delta = dragStartInvX.current - e.clientX;
+      const zFactor = zoom / 100;
+      const newWidth = dragStartInvWidth.current + (delta / zFactor);
+      setInvoiceDetailWidth(Math.max(350, Math.min(newWidth, 900)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingInvWidth(false);
+    };
+
+    if (isDraggingInvWidth) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingInvWidth, zoom]);
+
+  useEffect(() => {
+    if (activeTab === "invoices") {
+      loadInvoicesFromDB();
+    }
+  }, [activeTab, invoiceFromDate, invoiceToDate, invoiceCustomerQuery, invoiceCodeQuery, loadInvoicesFromDB]);
+
   useEffect(() => {
     if (editingProduct) {
       setEditForm({
@@ -469,11 +695,17 @@ function App() {
         const sDb = settings.mssqlDbName || "tiemdiennuoc";
         const sUser = settings.mssqlUser || "";
         const sPass = settings.mssqlPass || "";
+        const sShopName = settings.shopName || "Điện nước Tâm Nhi";
+        const sShopAddress = settings.shopAddress || "Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM";
+        const sShopPhone = settings.shopPhone || "0908 123 456";
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
         if (sUser) setMssqlUser(sUser);
         if (sPass) setMssqlPass(sPass);
+        setShopName(sShopName);
+        setShopAddress(sShopAddress);
+        setShopPhone(sShopPhone);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -510,7 +742,10 @@ function App() {
         mssqlServer,
         mssqlDbName,
         mssqlUser,
-        mssqlPass
+        mssqlPass,
+        shopName,
+        shopAddress,
+        shopPhone
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
@@ -1217,6 +1452,36 @@ function App() {
     setSelectedCartIndex(null);
   };
 
+  const handleSaveSaleToDB = async () => {
+    if (cart.length === 0) return;
+    if (mssqlServer && mssqlUser) {
+      try {
+        const formattedItems = cart.map(item => ({
+          productId: Number(item.product.id) || 0,
+          quantity: item.quantity,
+          price: item.product.price,
+          discount: item.discount || 0
+        }));
+        
+        await tauriInvoke("save_invoice_db", {
+          server: mssqlServer,
+          dbName: mssqlDbName,
+          user: mssqlUser,
+          pass: mssqlPass,
+          invoiceNo,
+          customerId: Number(selectedCustomer.id) || 1,
+          discountPct: 0.0,
+          discountVal: getCartDiscountTotal(),
+          notes: posNotes,
+          items: formattedItems
+        });
+      } catch (err: any) {
+        alert("Lỗi lưu hóa đơn vào CSDL: " + err.toString());
+        throw err;
+      }
+    }
+  };
+
   const handleSellOnDebt = async () => {
     if (cart.length === 0) {
       alert("Không có sản phẩm nào trong giỏ hàng để ghi nợ!");
@@ -1226,6 +1491,14 @@ function App() {
       alert("Không thể ghi nợ cho Khách lẻ. Vui lòng chọn khách hàng cụ thể hoặc thêm khách hàng mới!");
       return;
     }
+    
+    // Save invoice to CSDL first!
+    try {
+      await handleSaveSaleToDB();
+    } catch (e) {
+      return;
+    }
+
     const totalToPay = getCartFinalTotal();
     const newDebt = selectedCustomer.debt + totalToPay;
     
@@ -1260,13 +1533,7 @@ function App() {
     setSelectedCustomer(prev => ({ ...prev, debt: newDebt }));
     alert(`Hóa đơn ${invoiceNo} bán nợ thành công cho ${selectedCustomer.name}.\nSố tiền ghi nợ: ${formatVND(totalToPay)}đ.\nCông nợ: ${formatVND(newDebt)}đ.`);
     
-    // Reset POS
-    setCart([]);
-    setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
-    setSelectedCustomer(customers[0]);
-    setCustomerSearchQuery(customers[0].name);
-    setPosNotes("");
-    setSelectedCartIndex(null);
+    resetPOSAfterSale();
   };
 
   const resetPOSAfterSale = () => {
@@ -1318,7 +1585,17 @@ function App() {
         <div className="menu-item" onClick={() => setActiveTab("pos")} style={{ fontWeight: activeTab === 'pos' ? 'bold' : 'normal' }}>Bán Hàng</div>
         <div className="menu-item" onClick={() => setActiveTab("inventory")} style={{ fontWeight: activeTab === 'inventory' ? 'bold' : 'normal' }}>Sản phẩm</div>
         <div className="menu-item" onClick={() => setActiveTab("customers")} style={{ fontWeight: activeTab === 'customers' ? 'bold' : 'normal' }}>Khách hàng</div>
+        <div className="menu-item" onClick={() => setActiveTab("invoices")} style={{ fontWeight: activeTab === 'invoices' ? 'bold' : 'normal' }}>Hóa đơn</div>
         <div style={{ flex: 1 }}></div>
+        <div
+          className="menu-item"
+          onClick={handleRefresh}
+          title="Làm mới dữ liệu (F5)"
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: isRefreshing ? '#aaa' : undefined, cursor: isRefreshing ? 'wait' : 'pointer' }}
+        >
+          <span style={{ display: 'inline-block', animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
+          {isRefreshing ? 'Đang tải...' : 'Làm mới (F5)'}
+        </div>
         
         {activeTab === "pos" && (
           <>
@@ -2229,6 +2506,166 @@ function App() {
             </div>
           </div>
         )}
+
+        {activeTab === "invoices" && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '4px' }}>
+
+            {/* Filter Bar */}
+            <fieldset className="classic-fieldset" style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '4px 10px', flexWrap: 'wrap', margin: '4px 4px 0 4px' }}>
+              <legend>Bộ lọc Hóa đơn</legend>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Từ ngày:</span>
+                <input type="date" className="classic-input" style={{ width: '130px', height: '22px' }}
+                  value={invoiceFromDate} onChange={e => setInvoiceFromDate(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Đến ngày:</span>
+                <input type="date" className="classic-input" style={{ width: '130px', height: '22px' }}
+                  value={invoiceToDate} onChange={e => setInvoiceToDate(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 180px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Khách hàng:</span>
+                <input className="classic-input" style={{ flex: 1, height: '22px' }}
+                  placeholder="Tìm tên hoặc SĐT..." value={invoiceCustomerQuery}
+                  onChange={e => setInvoiceCustomerQuery(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 150px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Số HĐ:</span>
+                <input className="classic-input" style={{ flex: 1, height: '22px' }}
+                  placeholder="Tìm mã hóa đơn..." value={invoiceCodeQuery}
+                  onChange={e => setInvoiceCodeQuery(e.target.value)} />
+              </div>
+              <button className="classic-btn" style={{ height: '22px', gap: '4px' }} onClick={loadInvoicesFromDB}>
+                🔍 Tìm kiếm
+              </button>
+            </fieldset>
+
+            {/* Split View */}
+            <div style={{ display: 'flex', flex: 1, gap: '4px', minHeight: 0, padding: '0 4px 4px 4px' }}>
+
+              {/* Left: Invoice List Grid */}
+              <div style={{ display: 'flex', flexDirection: 'column', flex: selectedInvoice ? '1.3 1 0' : '1 1 0', minWidth: 0 }}>
+                <div className="grid-container" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
+                  <table className="data-grid" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '100px' }}>Số HĐ</th>
+                        <th style={{ width: '145px' }}>Ngày giờ</th>
+                        <th style={{ width: '150px' }}>Khách hàng</th>
+                        <th style={{ width: '110px', textAlign: 'right' }}>Tổng tiền</th>
+                        <th>Ghi chú</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loadingInvoices ? (
+                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>Đang tải...</td></tr>
+                      ) : invoicesList.length === 0 ? (
+                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>Không tìm thấy hóa đơn nào.</td></tr>
+                      ) : (
+                        invoicesList.map(inv => (
+                          <tr
+                            key={inv.IDHoaDon}
+                            className={selectedInvoice?.IDHoaDon === inv.IDHoaDon ? 'selected' : ''}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              setSelectedInvoice(inv);
+                              loadInvoiceDetailsFromDB(inv.IDHoaDon);
+                            }}
+                          >
+                            <td style={{ fontWeight: 'bold' }}>{inv.MaHoaDon}</td>
+                            <td>{inv.NgayHDStr} {inv.GioHDStr}</td>
+                            <td>{inv.TenKhachHang}{inv.DienThoaiKH ? ` (${inv.DienThoaiKH})` : ''}</td>
+                            <td style={{ textAlign: 'right', color: selectedInvoice?.IDHoaDon === inv.IDHoaDon ? 'inherit' : 'red', fontWeight: 'bold' }}>
+                              {formatVND(inv.TongTien)}đ
+                            </td>
+                            <td style={{ fontSize: '11px', color: selectedInvoice?.IDHoaDon === inv.IDHoaDon ? 'inherit' : '#666' }}>{inv.GhiChu}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--text-blue)', borderTop: '1px solid var(--border-dark)', background: 'var(--bg-toolbar)' }}>
+                  Tổng số hóa đơn: <strong>{invoicesList.length}</strong>
+                </div>
+              </div>
+
+              {/* Right: Invoice Detail Panel */}
+              {selectedInvoice && (
+                <>
+                  <div className="resizer-vertical" onMouseDown={handleMouseDownInvWidth} title="Kéo thả để thay đổi chiều rộng" />
+                  <div style={{ flex: `0 0 ${invoiceDetailWidth}px`, display: 'flex', flexDirection: 'column', gap: '4px', border: '1px solid var(--border-dark)', background: 'var(--bg-panel)' }}>
+                    {/* Detail Header */}
+                    <div style={{ background: 'linear-gradient(90deg,#000080,#1084d0)', color: '#fff', padding: '3px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '11px' }}>CHI TIẾT HÓA ĐƠN — {selectedInvoice.MaHoaDon}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button className="classic-btn" style={{ minWidth: 'auto', padding: '1px 8px', height: '18px', color: '#000', fontSize: '10px', fontWeight: 'bold' }} onClick={handleReprint}>🖨️ In lại</button>
+                        <button className="dialog-close-btn" onClick={() => { setSelectedInvoice(null); setSelectedInvoiceDetails([]); }}>✕</button>
+                      </div>
+                    </div>
+
+                    {/* Meta info */}
+                    <div style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px', borderBottom: '1px solid var(--border-dark)' }}>
+                      <div><strong>Khách hàng:</strong> {selectedInvoice.TenKhachHang}{selectedInvoice.DienThoaiKH ? ` (${selectedInvoice.DienThoaiKH})` : ''}</div>
+                      <div><strong>Ngày bán:</strong> {selectedInvoice.NgayHDStr} {selectedInvoice.GioHDStr}</div>
+                      {selectedInvoice.GhiChu && <div><strong>Ghi chú:</strong> {selectedInvoice.GhiChu}</div>}
+                    </div>
+
+                    {/* Detail Grid */}
+                    <div className="grid-container" style={{ flex: 1, overflow: 'auto', margin: 0, borderLeft: 'none', borderRight: 'none' }}>
+                      <table className="data-grid" style={{ fontSize: '11px', tableLayout: 'fixed', width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th>Tên hàng</th>
+                            <th style={{ width: '38px', textAlign: 'center' }}>ĐVT</th>
+                            <th style={{ width: '42px', textAlign: 'right' }}>SL</th>
+                            <th style={{ width: '78px', textAlign: 'right' }}>Đơn giá</th>
+                            <th style={{ width: '38px', textAlign: 'right' }}>KM%</th>
+                            <th style={{ width: '85px', textAlign: 'right' }}>Thành tiền</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedInvoiceDetails.length === 0 ? (
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '12px', color: '#999' }}>Đang tải chi tiết...</td></tr>
+                          ) : (
+                            selectedInvoiceDetails.map(item => (
+                              <tr key={item.id}>
+                                <td>{item.productName}</td>
+                                <td>{item.unit}</td>
+                                <td style={{ textAlign: 'right' }}>{item.quantity}</td>
+                                <td style={{ textAlign: 'right' }}>{formatVND(item.price)}</td>
+                                <td style={{ textAlign: 'right' }}>{item.discount > 0 ? `${item.discount}%` : ''}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'red' }}>{formatVND(item.total)}đ</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Totals footer */}
+                    <div style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px', borderTop: '1px solid var(--border-dark)', background: 'var(--bg-toolbar)' }}>
+                      {selectedInvoice.PTKhuyenMai > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'blue' }}>
+                          <span>Khuyến mại (%):</span><span>{selectedInvoice.PTKhuyenMai}%</span>
+                        </div>
+                      )}
+                      {selectedInvoice.TienKhuyenMai > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'blue' }}>
+                          <span>Tiền khuyến mại:</span><span>-{formatVND(selectedInvoice.TienKhuyenMai)}đ</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '18px', color: 'red', borderTop: '1px solid var(--border-dark)', paddingTop: '6px', marginTop: '2px' }}>
+                        <span>TỔNG THANH TOÁN:</span>
+                        <span>{formatVND(selectedInvoice.TongTien)}đ</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status Bar */}
@@ -2237,7 +2674,7 @@ function App() {
         <div className="status-panel">Ca: 1</div>
         <div className="status-panel">Server: MSSQL_PREP (Chưa kết nối)</div>
         <div className="status-panel" style={{ flex: 1 }}>hiện giờ không có khuyến mãi</div>
-        <div className="status-panel">Điện nước TÂM NHI - 2026</div>
+        <div className="status-panel">{shopName} - 2026</div>
       </div>
 
       {editingProduct && editForm && (
@@ -2356,7 +2793,7 @@ function App() {
 
       {isSystemModalOpen && (
         <div className="modal-overlay">
-          <div className="classic-dialog" style={{ width: '420px' }}>
+          <div className="classic-dialog" style={{ width: '450px' }}>
             <div className="dialog-title-bar">
               <span className="dialog-title">Cấu hình Hệ thống</span>
               <button className="dialog-close-btn" onClick={() => setIsSystemModalOpen(false)}>✕</button>
@@ -2404,6 +2841,38 @@ function App() {
                   <option value={175}>175%</option>
                   <option value={200}>200% (Rất lớn)</option>
                 </select>
+              </fieldset>
+
+              {/* Thông tin Cửa hàng */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                <legend>Thông tin Cửa hàng (In hóa đơn)</legend>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên cửa hàng:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1 }} 
+                    value={shopName} 
+                    onChange={e => setShopName(e.target.value)} 
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Địa chỉ:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1 }} 
+                    value={shopAddress} 
+                    onChange={e => setShopAddress(e.target.value)} 
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Số điện thoại:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1 }} 
+                    value={shopPhone} 
+                    onChange={e => setShopPhone(e.target.value)} 
+                  />
+                </div>
               </fieldset>
 
               {/* Kết nối MSSQL Database */}
@@ -2871,12 +3340,12 @@ function App() {
                 maxHeight: '350px',
                 overflowY: 'auto'
               }}>
-                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>
-                  CỬA HÀNG ĐIỆN NƯỚC TÂM NHI
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px', textTransform: 'uppercase' }}>
+                  {shopName}
                 </div>
                 <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                  ĐC: Khu phố 3, Thị trấn Củ Chi, TP. HCM<br/>
-                  SĐT: 0908 123 456
+                  ĐC: {shopAddress}<br/>
+                  SĐT: {shopPhone}
                 </div>
                 <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
                 <div><strong>Số HĐ:</strong> {invoiceNo}</div>
@@ -2933,18 +3402,24 @@ function App() {
               </div>
               
               <div className="dialog-buttons" style={{ marginTop: '8px' }}>
-                <button className="classic-btn" onClick={() => {
-                  window.print();
-                  resetPOSAfterSale();
-                  alert("Đã gửi lệnh in hóa đơn thành công!");
+                <button className="classic-btn" onClick={async () => {
+                  try {
+                    await handleSaveSaleToDB();
+                    window.print();
+                    resetPOSAfterSale();
+                    alert("Đã gửi lệnh in hóa đơn thành công!");
+                  } catch (e) {}
                 }}>
                   🖨️ IN
                 </button>
-                <button className="classic-btn" onClick={() => {
-                  resetPOSAfterSale();
-                  alert("Thanh toán thành công!");
+                <button className="classic-btn" onClick={async () => {
+                  try {
+                    await handleSaveSaleToDB();
+                    resetPOSAfterSale();
+                    alert("Thanh toán thành công!");
+                  } catch (e) {}
                 }}>
-                  ✔️ Đóng
+                  ✔️ OK
                 </button>
                 <button className="classic-btn" onClick={() => setIsCheckoutModalOpen(false)}>
                   ❌ Hủy
@@ -3201,21 +3676,21 @@ function App() {
       {/* Print section for 80mm thermal POS receipt printer */}
       <div id="print-section" className="print-only">
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', margin: '0 0 2px 0', textTransform: 'uppercase' }}>
-          Điện nước Tâm Nhi
+          {shopName}
         </div>
         <div style={{ textAlign: 'center', fontSize: '10px', margin: '0 0 6px 0' }}>
-          ĐC: Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM<br />
-          SĐT: 0908 123 456
+          ĐC: {shopAddress}<br />
+          SĐT: {shopPhone}
         </div>
         <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0 6px 0' }}>
-          PHIẾU THANH TOÁN
+          {printJob ? "PHIẾU IN LẠI" : "PHIẾU THANH TOÁN"}
         </div>
         <div style={{ fontSize: '10px', margin: '0 0 6px 0', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div><strong>Số phiếu:</strong> {invoiceNo}</div>
-          <div><strong>Thời gian:</strong> {invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`}</div>
-          <div><strong>Khách hàng:</strong> {selectedCustomer.name} {selectedCustomer.phone ? `(${selectedCustomer.phone})` : ''}</div>
-          {posNotes && <div><strong>Ghi chú:</strong> {posNotes}</div>}
+          <div><strong>Số phiếu:</strong> {printJob ? printJob.invoiceNo : invoiceNo}</div>
+          <div><strong>Thời gian:</strong> {printJob ? printJob.dateTimeStr : (invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`)}</div>
+          <div><strong>Khách hàng:</strong> {printJob ? `${printJob.customerName} ${printJob.customerPhone ? `(${printJob.customerPhone})` : ''}` : `${selectedCustomer.name} ${selectedCustomer.phone ? `(${selectedCustomer.phone})` : ''}`}</div>
+          {(printJob ? printJob.notes : posNotes) && <div><strong>Ghi chú:</strong> {printJob ? printJob.notes : posNotes}</div>}
         </div>
         <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
         
@@ -3229,27 +3704,46 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {cart.map((item, idx) => {
-              const baseAmt = item.product.price * item.quantity;
-              const disc = item.discount || 0;
-              const finalAmt = baseAmt - baseAmt * (disc / 100);
-              return (
+            {printJob ? (
+              printJob.items.map((item: any, idx: number) => (
                 <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
                   <td style={{ padding: '3px 0', verticalAlign: 'top', wordBreak: 'break-word' }}>
-                    {item.product.name}
+                    {item.productName}
                   </td>
                   <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
                     {item.quantity}
                   </td>
                   <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
-                    {formatVND(item.product.price)}
+                    {formatVND(item.price)}
                   </td>
                   <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
-                    {formatVND(finalAmt)}
+                    {formatVND(item.total)}
                   </td>
                 </tr>
-              );
-            })}
+              ))
+            ) : (
+              cart.map((item, idx) => {
+                const baseAmt = item.product.price * item.quantity;
+                const disc = item.discount || 0;
+                const finalAmt = baseAmt - baseAmt * (disc / 100);
+                return (
+                  <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
+                    <td style={{ padding: '3px 0', verticalAlign: 'top', wordBreak: 'break-word' }}>
+                      {item.product.name}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                      {item.quantity}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                      {formatVND(item.product.price)}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 0', verticalAlign: 'top' }}>
+                      {formatVND(finalAmt)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
         
@@ -3257,17 +3751,23 @@ function App() {
         <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '3px', margin: '4px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Cộng tiền hàng:</span>
-            <span>{formatVND(getCartBaseTotal())}đ</span>
+            <span>{formatVND(printJob ? printJob.baseTotal : getCartBaseTotal())}đ</span>
           </div>
-          {getCartDiscountTotal() > 0 && (
+          {(printJob ? printJob.discountTotal > 0 : getCartDiscountTotal() > 0) && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Giảm giá:</span>
-              <span>-{formatVND(getCartDiscountTotal())}đ</span>
+              <span>-{formatVND(printJob ? printJob.discountTotal : getCartDiscountTotal())}đ</span>
+            </div>
+          )}
+          {printJob?.invoiceDiscountPercent > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Chiết khấu HĐ:</span>
+              <span>{printJob.invoiceDiscountPercent}%</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '12px', marginTop: '2px' }}>
             <span>TỔNG CỘNG:</span>
-            <span>{formatVND(getCartFinalTotal())}đ</span>
+            <span>{formatVND(printJob ? printJob.finalTotal : getCartFinalTotal())}đ</span>
           </div>
         </div>
         <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />

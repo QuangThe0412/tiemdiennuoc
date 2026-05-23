@@ -25,6 +25,11 @@
   padding: 0;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 body {
   font-family: Tahoma, "MS Sans Serif", Arial, sans-serif;
   font-size: 12px;
@@ -316,6 +321,20 @@ input, select, button {
 
 .resizer-horizontal:hover,
 .resizer-horizontal:active {
+  background-color: #b0c4de;
+}
+
+.resizer-vertical {
+  width: 6px;
+  cursor: col-resize;
+  background-color: var(--bg-toolbar);
+  border-left: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-dark);
+  transition: background-color 0.2s ease;
+}
+
+.resizer-vertical:hover,
+.resizer-vertical:active {
   background-color: #b0c4de;
 }
 

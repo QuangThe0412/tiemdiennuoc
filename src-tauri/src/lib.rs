@@ -560,6 +560,309 @@ async fn save_file_to_downloads(file_name: String, content: String) -> Result<St
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn fetch_invoices_db(
+    server: String,
+    db_name: String,
+    user: String,
+    pass: String,
+    from_date: String,
+    to_date: String,
+    customer_query: String,
+    invoice_code_query: String
+) -> Result<String, String> {
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+    
+    let from_dt = format!("{} 00:00:00", from_date);
+    let to_dt = format!("{} 23:59:59", to_date);
+    
+    let cust_like = if customer_query.is_empty() {
+        "".to_string()
+    } else {
+        format!("%{}%", customer_query)
+    };
+    
+    let code_like = if invoice_code_query.is_empty() {
+        "".to_string()
+    } else {
+        format!("%{}%", invoice_code_query)
+    };
+    
+    let query_str = "
+        SELECT 
+            h.IDHoaDon,
+            h.MaHoaDon,
+            CONVERT(varchar, h.NgayHD, 23) as NgayHDStr,
+            CONVERT(varchar, h.GioHD, 108) as GioHDStr,
+            CAST(h.PTKhuyenMai AS FLOAT) as PTKhuyenMai,
+            CAST(h.TienKhuyenMai AS FLOAT) as TienKhuyenMai,
+            h.GhiChu,
+            h.IDKhachHang,
+            k.TenKhachHang,
+            k.DienThoai as DienThoaiKH,
+            CAST(ISNULL((
+                SELECT SUM(ct.SoLuong * ct.DonGia * (1.0 - ISNULL(ct.PTKhuyenMaiMon, 0.0) / 100.0))
+                FROM ChiTietHD ct
+                WHERE ct.IDHoaDon = h.IDHoaDon
+            ), 0.0) AS FLOAT) as TongTien
+        FROM HoaDon h
+        LEFT JOIN KhachHang k ON h.IDKhachHang = k.IDKhachHang
+        WHERE h.NgayHD >= @P1 AND h.NgayHD <= @P2
+          AND (@P3 = '' OR k.TenKhachHang LIKE @P3 OR k.DienThoai LIKE @P3)
+          AND (@P4 = '' OR h.MaHoaDon LIKE @P4)
+        ORDER BY h.NgayHD DESC, h.GioHD DESC
+    ";
+    
+    let stream = client.query(query_str, &[&from_dt, &to_dt, &cust_like, &code_like]).await.map_err(|e| e.to_string())?;
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    
+    let mut invoices = Vec::new();
+    for row in rows {
+        let id: i32 = row.get("IDHoaDon").unwrap_or(0);
+        let code: &str = row.get("MaHoaDon").unwrap_or("");
+        let ngay_hd: &str = row.get("NgayHDStr").unwrap_or("");
+        let gio_hd: &str = row.get("GioHDStr").unwrap_or("");
+        let pt_km: f64 = row.get("PTKhuyenMai").unwrap_or(0.0);
+        let tien_km: f64 = row.get("TienKhuyenMai").unwrap_or(0.0);
+        let note: &str = row.get("GhiChu").unwrap_or("");
+        let customer_id: i32 = row.get("IDKhachHang").unwrap_or(0);
+        let customer_name: &str = row.get("TenKhachHang").unwrap_or("Khách lẻ");
+        let customer_phone: &str = row.get("DienThoaiKH").unwrap_or("");
+        let total: f64 = row.get("TongTien").unwrap_or(0.0);
+        
+        invoices.push(serde_json::json!({
+            "IDHoaDon": id,
+            "MaHoaDon": code,
+            "NgayHDStr": ngay_hd,
+            "GioHDStr": gio_hd,
+            "PTKhuyenMai": pt_km,
+            "TienKhuyenMai": tien_km,
+            "GhiChu": note,
+            "IDKhachHang": customer_id,
+            "TenKhachHang": customer_name,
+            "DienThoaiKH": customer_phone,
+            "TongTien": total
+        }));
+    }
+    
+    Ok(serde_json::to_string(&invoices).unwrap())
+}
+
+#[tauri::command]
+async fn fetch_invoice_details_db(
+    server: String,
+    db_name: String,
+    user: String,
+    pass: String,
+    invoice_id: i32
+) -> Result<String, String> {
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+    
+    let query_str = "
+        SELECT 
+            ct.IDChiTietHD,
+            ct.IDMon,
+            m.TenMon,
+            m.DVTMon,
+            CAST(ct.SoLuong AS FLOAT) as SoLuong,
+            CAST(ct.DonGia AS FLOAT) as DonGia,
+            CAST(ct.PTKhuyenMaiMon AS FLOAT) as PTKhuyenMaiMon,
+            CAST((ct.SoLuong * ct.DonGia * (1.0 - ISNULL(ct.PTKhuyenMaiMon, 0.0) / 100.0)) AS FLOAT) as ThanhTien
+        FROM ChiTietHD ct
+        INNER JOIN Mon m ON ct.IDMon = m.IDMon
+        WHERE ct.IDHoaDon = @P1
+    ";
+    
+    let stream = client.query(query_str, &[&invoice_id]).await.map_err(|e| e.to_string())?;
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    
+    let mut items = Vec::new();
+    for row in rows {
+        let id: i32 = row.get("IDChiTietHD").unwrap_or(0);
+        let product_id: i32 = row.get("IDMon").unwrap_or(0);
+        let product_name: &str = row.get("TenMon").unwrap_or("");
+        let unit: &str = row.get("DVTMon").unwrap_or("");
+        let quantity: f64 = row.get("SoLuong").unwrap_or(0.0);
+        let price: f64 = row.get("DonGia").unwrap_or(0.0);
+        let discount: f64 = row.get("PTKhuyenMaiMon").unwrap_or(0.0);
+        let total: f64 = row.get("ThanhTien").unwrap_or(0.0);
+        
+        items.push(serde_json::json!({
+            "id": id,
+            "productId": product_id,
+            "productName": product_name,
+            "unit": unit,
+            "quantity": quantity,
+            "price": price,
+            "discount": discount,
+            "total": total
+        }));
+    }
+    
+    Ok(serde_json::to_string(&items).unwrap())
+}
+
+#[tauri::command]
+async fn save_invoice_db(
+    server: String,
+    db_name: String,
+    user: String,
+    pass: String,
+    invoice_no: String,
+    customer_id: i32,
+    discount_pct: f64,
+    discount_val: f64,
+    notes: String,
+    items: Vec<serde_json::Value>
+) -> Result<i32, String> {
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+    let mut doi_tac_id: i32 = 0;
+    if let Ok(query_dt) = client.query("SELECT TOP 1 IDDoiTac FROM DoiTac ORDER BY IDDoiTac ASC", &[]).await {
+        if let Ok(Some(row_dt)) = query_dt.into_row().await {
+            if let Some(dt_id) = row_dt.get("IDDoiTac") {
+                doi_tac_id = dt_id;
+            }
+        }
+    }
+
+    let mut nguoi_dung_id: i32 = 1;
+    if let Ok(query_nd) = client.query("SELECT TOP 1 IDNguoiDung FROM NguoiDung ORDER BY IDNguoiDung ASC", &[]).await {
+        if let Ok(Some(row_nd)) = query_nd.into_row().await {
+            if let Some(nd_id) = row_nd.get("IDNguoiDung") {
+                nguoi_dung_id = nd_id;
+            }
+        }
+    }
+
+    // Validate customer_id exists in KhachHang; if not, fall back to first available
+    let mut resolved_customer_id = customer_id;
+    let mut kh_count: i32 = 0;
+    {
+        if let Ok(stream) = client.query(
+            "SELECT COUNT(1) as cnt FROM KhachHang WHERE IDKhachHang = @P1",
+            &[&customer_id]
+        ).await {
+            if let Ok(Some(row)) = stream.into_row().await {
+                kh_count = row.get(0).unwrap_or(0);
+            }
+        }
+    }
+    if kh_count == 0 {
+        if let Ok(fallback_stream) = client.query(
+            "SELECT TOP 1 IDKhachHang FROM KhachHang ORDER BY IDKhachHang ASC",
+            &[]
+        ).await {
+            if let Ok(Some(fallback_row)) = fallback_stream.into_row().await {
+                if let Some(fid) = fallback_row.get("IDKhachHang") {
+                    resolved_customer_id = fid;
+                }
+            }
+        }
+    }
+
+    // Insert into HoaDon table
+    let insert_hd_query = "
+        INSERT INTO HoaDon (
+            NgayHD, GioHD, PTKhuyenMai, TienKhuyenMai, IDNguoiDung, LanIn, Ca, VAT, GhiChu, IDKhachHang, IDDoiTac, IDPhieuChiDoiTac, MaHoaDon, DiemQuyDoi, Locked
+        )
+        OUTPUT INSERTED.IDHoaDon
+        VALUES (
+            GETDATE(), GETDATE(), CAST(@P1 AS decimal(18,2)), CAST(@P2 AS decimal(18,2)), @P3, 0, 1, 0, @P4, @P5, @P6, 0, @P7, 0, 0
+        )
+    ";
+    
+    let stream = client.query(
+        insert_hd_query,
+        &[
+            &discount_pct,
+            &discount_val,
+            &nguoi_dung_id,
+            &notes,
+            &resolved_customer_id,
+            &doi_tac_id,
+            &invoice_no
+        ]
+    ).await.map_err(|e| e.to_string())?;
+    
+    let row = stream.into_row().await.map_err(|e| e.to_string())?
+        .ok_or_else(|| "Failed to insert HoaDon: ID output not returned".to_string())?;
+        
+    let invoice_id: i32 = row.get(0).unwrap_or(0);
+    
+    // Insert items into ChiTietHD
+    for item in items {
+        // Parse IDMon: productId is sent as a JSON number from frontend, so read as_i64() directly
+        let product_id: i32 = item["productId"].as_i64().unwrap_or(0) as i32;
+        
+        let quantity: f64 = item["quantity"].as_f64().unwrap_or(
+            item["quantity"].as_i64().unwrap_or(0) as f64
+        );
+        let price: f64 = item["price"].as_f64().unwrap_or(
+            item["price"].as_i64().unwrap_or(0) as f64
+        );
+        let discount: f64 = item["discount"].as_f64().unwrap_or(
+            item["discount"].as_i64().unwrap_or(0) as f64
+        );
+        
+        client.execute(
+            "INSERT INTO ChiTietHD (IDHoaDon, IDMon, SoLuong, DonGia, PTKhuyenMaiMon, VAT)
+             VALUES (@P1, @P2, CAST(@P3 AS decimal(18,2)), CAST(@P4 AS decimal(18,2)), CAST(@P5 AS decimal(18,2)), 0)",
+            &[&invoice_id, &product_id, &quantity, &price, &discount]
+        ).await.map_err(|e| e.to_string())?;
+    }
+    
+    Ok(invoice_id)
+}
+
+#[tauri::command]
+async fn get_database_schema(
+    server: String, 
+    db_name: String, 
+    user: String, 
+    pass: String
+) -> Result<String, String> {
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+    
+    let stream = client.simple_query("
+        SELECT 
+            t.name AS TableName,
+            c.name AS ColumnName,
+            ty.name AS DataType
+        FROM sys.tables t
+        INNER JOIN sys.columns c ON t.object_id = c.object_id
+        INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+        ORDER BY t.name, c.column_id
+    ").await.map_err(|e| e.to_string())?;
+    
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    let mut list = Vec::new();
+    for row in rows {
+        let table_name: &str = row.get("TableName").unwrap_or("");
+        let column_name: &str = row.get("ColumnName").unwrap_or("");
+        let data_type: &str = row.get("DataType").unwrap_or("");
+        list.push(serde_json::json!({
+            "table": table_name,
+            "column": column_name,
+            "type": data_type
+        }));
+    }
+    
+    Ok(serde_json::to_string(&list).unwrap())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -581,7 +884,11 @@ pub fn run() {
             fetch_customers_db,
             save_customer_db,
             delete_customer_db,
-            save_file_to_downloads
+            save_file_to_downloads,
+            get_database_schema,
+            fetch_invoices_db,
+            fetch_invoice_details_db,
+            save_invoice_db
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

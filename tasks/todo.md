@@ -26,3 +26,9 @@
 ## 7. Kiểm tra biên dịch & hoạt động
 - [x] Sửa lỗi khóa ngoại `FK_Mon_LoaiMon` bằng cách query tự động IDLoaiMon đầu tiên từ DB.
 - [x] Biên dịch kiểm tra thành công.
+
+## 8. Cập nhật theo phản hồi mới nhất (23/05/2026)
+- [x] Đặt mặc định hiển thị hóa đơn từ ngày đầu tháng đến ngày hiện tại.
+- [x] Khắc phục lỗi khóa ngoại `FK_HoaDon_DoiTac` bằng cách tự động truy vấn và sử dụng `IDDoiTac` đầu tiên từ bảng `DoiTac` (cùng với `IDNguoiDung` từ `NguoiDung`).
+- [x] Đổi nhãn nút "Đóng" trong modal in/xem trước hóa đơn thành "OK".
+
