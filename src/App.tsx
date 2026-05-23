@@ -36,6 +36,17 @@ const tauriInvoke = async (cmd: string, args: any = {}): Promise<any> => {
       }, 800);
     });
   }
+  if (cmd === "save_file_to_downloads") {
+    const blob = new Blob([args.content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", args.fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return `Thư mục tải xuống của Trình duyệt (${args.fileName})`;
+  }
   return null;
 };
 
@@ -89,6 +100,10 @@ function App() {
   const [isPayDebtModalOpen, setIsPayDebtModalOpen] = useState(false);
   const [payDebtAmount, setPayDebtAmount] = useState(0);
 
+  // Modal for Thêm nợ
+  const [isAddDebtModalOpen, setIsAddDebtModalOpen] = useState(false);
+  const [addDebtAmount, setAddDebtAmount] = useState(0);
+
   // Pending Invoices State
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
@@ -96,6 +111,41 @@ function App() {
   // Modal for Checkout Review
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isUnitManagerOpen, setIsUnitManagerOpen] = useState(false);
+
+  // Custom Alert state
+  const [customAlert, setCustomAlert] = useState<{ message: string; title: string; type: 'info' | 'warning' | 'error' } | null>(null);
+  
+  const showAlert = useCallback((message: string, title?: string, type?: 'info' | 'warning' | 'error') => {
+    let resolvedTitle = title || "";
+    let resolvedType = type;
+
+    const lowerMessage = String(message).toLowerCase();
+    
+    // Automatically detect type if not provided
+    if (!resolvedType) {
+      if (lowerMessage.includes("lỗi") || lowerMessage.includes("thất bại") || lowerMessage.includes("không đúng") || lowerMessage.includes("trống") || lowerMessage.includes("trùng") || lowerMessage.includes("sai")) {
+        resolvedType = "error";
+      } else if (lowerMessage.includes("cảnh báo") || lowerMessage.includes("chú ý") || lowerMessage.includes("cẩn thận") || lowerMessage.includes("không thể") || lowerMessage.includes("chưa")) {
+        resolvedType = "warning";
+      } else {
+        resolvedType = "info";
+      }
+    }
+
+    if (!resolvedTitle) {
+      if (resolvedType === "error") resolvedTitle = "Lỗi";
+      else if (resolvedType === "warning") resolvedTitle = "Cảnh báo";
+      else resolvedTitle = "Thông tin";
+    }
+
+    setCustomAlert({ message: String(message), title: resolvedTitle, type: resolvedType });
+  }, []);
+
+  useEffect(() => {
+    window.alert = (message: any) => {
+      showAlert(message);
+    };
+  }, [showAlert]);
 
   // POS State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -113,7 +163,10 @@ function App() {
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; link?: string; available?: boolean } | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [imageEditProduct, setImageEditProduct] = useState<Product | null>(null);
+  const [imageEditLink, setImageEditLink] = useState("");
+  const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; price2: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [tempZoom, setTempZoom] = useState(100);
@@ -154,7 +207,7 @@ function App() {
   const [customerSearchDebounced, setCustomerSearchDebounced] = useState("");
   const [posSearchDebounced, setPosSearchDebounced] = useState("");
   const [inventoryUnitFilter, setInventoryUnitFilter] = useState("");
-  const [inventoryAvailableFilter, setInventoryAvailableFilter] = useState("active");
+  const [inventoryAvailableFilter, setInventoryAvailableFilter] = useState("all");
   const [posLimit, setPosLimit] = useState(100);
   const [inventoryLimit, setInventoryLimit] = useState(100);
   const [customerLimit, setCustomerLimit] = useState(100);
@@ -248,11 +301,24 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen || isCheckoutModalOpen) {
+        if (customAlert) {
+          setCustomAlert(null);
+          return;
+        }
+        if (productToDelete) {
+          setProductToDelete(null);
+          return;
+        }
+        if (imageEditProduct) {
+          setImageEditProduct(null);
+          return;
+        }
+        if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isAddDebtModalOpen || isPendingModalOpen || isCheckoutModalOpen) {
           setEditingProduct(null);
           setIsSystemModalOpen(false);
           setIsCustomerModalOpen(false);
           setIsPayDebtModalOpen(false);
+          setIsAddDebtModalOpen(false);
           setIsPendingModalOpen(false);
           setIsCheckoutModalOpen(false);
           return;
@@ -296,30 +362,33 @@ function App() {
           lastCustomerEscPress.current = now;
         }
       }
-      if (e.key === 'F1') {
-        e.preventDefault();
-        handleSaveTemporary();
-      }
-      if (e.key === 'F2') {
-        e.preventDefault();
-        handleCheckout();
-      }
-      if (e.key === 'F3') {
-        e.preventDefault();
-        handleSellOnDebt();
-      }
-      if (e.key === 'F9') {
-        e.preventDefault();
-        setIsPendingModalOpen(true);
-      }
-      if (e.key === 'Delete' && selectedCartIndex !== null && document.activeElement?.tagName !== 'INPUT') {
-        setCart(prev => prev.filter((_, i) => i !== selectedCartIndex));
-        setSelectedCartIndex(null);
+      
+      if (activeTab === 'pos') {
+        if (e.key === 'F1') {
+          e.preventDefault();
+          handleSaveTemporary();
+        }
+        if (e.key === 'F2') {
+          e.preventDefault();
+          handleCheckout();
+        }
+        if (e.key === 'F3') {
+          e.preventDefault();
+          handleSellOnDebt();
+        }
+        if (e.key === 'F9') {
+          e.preventDefault();
+          setIsPendingModalOpen(true);
+        }
+        if (e.key === 'Delete' && selectedCartIndex !== null && document.activeElement?.tagName !== 'INPUT') {
+          setCart(prev => prev.filter((_, i) => i !== selectedCartIndex));
+          setSelectedCartIndex(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
+  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, productToDelete, imageEditProduct]);
 
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
     const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
@@ -373,6 +442,7 @@ function App() {
         name: editingProduct.name,
         unit: editingProduct.unit,
         price: editingProduct.price,
+        price2: editingProduct.price2 || 0,
         link: editingProduct.link || "",
         available: editingProduct.available !== false,
       });
@@ -519,7 +589,7 @@ function App() {
           name: p.name,
           unit: p.unit,
           price: p.price,
-          price2: 0,
+          price2: p.price2 || 0,
           cost: 0,
           stock: p.stock,
           available: p.available !== false,
@@ -713,13 +783,14 @@ function App() {
     return result;
   };
 
-  const handleExportCSV = () => {
-    const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Kho", "Hình ảnh", "Còn bán"];
+  const handleExportCSV = async () => {
+    const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Đơn giá 2", "Kho", "Hình ảnh", "Còn bán"];
     const rows = products.map(p => [
       p.sku,
       p.name,
       p.unit,
       p.price.toString(),
+      (p.price2 || 0).toString(),
       p.stock.toString(),
       p.link || "",
       p.available !== false ? "1" : "0"
@@ -729,14 +800,34 @@ function App() {
       ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(","))
     ].join("\n");
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `danh_sach_san_pham_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const savedPath = await tauriInvoke("save_file_to_downloads", {
+        fileName: `danh_sach_san_pham_${new Date().toISOString().slice(0, 10)}.csv`,
+        content: csvContent
+      });
+      showAlert(`Đã xuất file thành công tại thư mục Downloads:\n${savedPath}`, "Xuất file", "info");
+    } catch (err: any) {
+      showAlert(`Lỗi xuất file: ${err.toString()}`, "Lỗi", "error");
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Đơn giá 2", "Kho", "Hình ảnh", "Còn bán"];
+    const sampleRow = ["P001", "Ong nuoc Tien Phong", "Cuộn", "50000", "46000", "10", "https://example.com/image.jpg", "1"];
+    const csvContent = "\uFEFF" + [
+      headers.join(","),
+      sampleRow.map(val => `"${val.replace(/"/g, '""')}"`).join(",")
+    ].join("\n");
+
+    try {
+      const savedPath = await tauriInvoke("save_file_to_downloads", {
+        fileName: `template_import_san_pham.csv`,
+        content: csvContent
+      });
+      showAlert(`Đã tải file mẫu thành công tại thư mục Downloads:\n${savedPath}`, "Tải file mẫu", "info");
+    } catch (err: any) {
+      showAlert(`Lỗi tải file mẫu: ${err.toString()}`, "Lỗi", "error");
+    }
   };
 
   const triggerImportClick = () => {
@@ -880,7 +971,12 @@ function App() {
     const lowerSearch = removeAccents(inventorySearchDebounced.toLowerCase());
     return products.filter(p => {
       const matchesUnit = !inventoryUnitFilter || p.unit === inventoryUnitFilter;
-      const matchesAvailable = inventoryAvailableFilter === "all" || p.available !== false;
+      let matchesAvailable = true;
+      if (inventoryAvailableFilter === "active") {
+        matchesAvailable = p.available !== false;
+      } else if (inventoryAvailableFilter === "inactive") {
+        matchesAvailable = p.available === false;
+      }
       const nameNorm = removeAccents(p.name.toLowerCase());
       const skuNorm = removeAccents(p.sku.toLowerCase());
       return matchesUnit && matchesAvailable && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
@@ -902,7 +998,7 @@ function App() {
       const skuNorm = removeAccents(p.sku.toLowerCase());
       return nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch);
     });
-    if (match) {
+    if (match && match.available !== false) {
       addToCart(match);
       setPosSearch("");
     }
@@ -935,6 +1031,7 @@ function App() {
         name: editForm.name,
         category: "Khác",
         price: editForm.price,
+        price2: editForm.price2,
         cost: 0,
         stock: 0,
         unit: editForm.unit,
@@ -955,7 +1052,7 @@ function App() {
               name: editForm.name,
               unit: editForm.unit,
               price: editForm.price,
-              price2: 0,
+              price2: editForm.price2 || 0,
               cost: 0,
               stock: 0,
               available: editForm.available !== false,
@@ -988,7 +1085,7 @@ function App() {
               name: editForm.name,
               unit: editForm.unit,
               price: editForm.price,
-              price2: 0,
+              price2: editForm.price2 || 0,
               cost: 0,
               stock: 0,
               available: editForm.available !== false,
@@ -1020,6 +1117,80 @@ function App() {
     }
 
     setEditingProduct(null);
+  };
+
+  const handleConfirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    const p = productToDelete;
+    if (mssqlServer && mssqlUser) {
+      try {
+        await tauriInvoke("delete_product_db", {
+          server: mssqlServer,
+          dbName: mssqlDbName,
+          user: mssqlUser,
+          pass: mssqlPass,
+          id: Number(p.id) || 0
+        });
+      } catch (err: any) {
+        showAlert("Lỗi khi xóa mặt hàng khỏi CSDL: " + err.toString(), "Lỗi", "error");
+        setProductToDelete(null);
+        return;
+      }
+    }
+    setProducts(prev => prev.filter(item => item.id !== p.id));
+    if (selectedProduct?.id === p.id) {
+      setSelectedProduct(null);
+    }
+    showAlert(`Đã xóa mặt hàng "${p.name}" thành công.`, "Thành công", "info");
+    setProductToDelete(null);
+  };
+
+  const handleSaveProductImage = async () => {
+    if (!imageEditProduct) return;
+    const p = imageEditProduct;
+    const updatedProduct = { ...p, link: imageEditLink };
+
+    if (mssqlServer && mssqlUser) {
+      try {
+        await tauriInvoke("save_product_db", {
+          server: mssqlServer,
+          dbName: mssqlDbName,
+          user: mssqlUser,
+          pass: mssqlPass,
+          product: JSON.stringify({
+            id: Number(updatedProduct.id) || 0,
+            sku: updatedProduct.sku,
+            name: updatedProduct.name,
+            unit: updatedProduct.unit,
+            price: updatedProduct.price,
+            price2: updatedProduct.price2 || 0,
+            cost: 0,
+            stock: updatedProduct.stock,
+            available: updatedProduct.available !== false,
+            link: imageEditLink || ""
+          })
+        });
+      } catch (err: any) {
+        showAlert("Lỗi lưu hình ảnh mặt hàng vào CSDL: " + err.toString(), "Lỗi", "error");
+        return;
+      }
+    }
+
+    setProducts(prev => prev.map(item => item.id === p.id ? updatedProduct : item));
+    if (selectedProduct?.id === p.id) {
+      setSelectedProduct(updatedProduct);
+    }
+    setCart(prev => prev.map(item => {
+      if (item.product.id === p.id) {
+        return {
+          ...item,
+          product: updatedProduct
+        };
+      }
+      return item;
+    }));
+    showAlert(`Đã cập nhật hình ảnh cho mặt hàng "${p.name}" thành công.`, "Thành công", "info");
+    setImageEditProduct(null);
   };
 
   const handleSaveTemporary = () => {
@@ -1172,28 +1343,28 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
             {/* Top Section: Invoice Info */}
-            <div className="pos-top-section" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '6px' }}>
-              <fieldset className="classic-fieldset" style={{ flex: '1 1 300px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div className="pos-top-section" style={{ display: 'flex', gap: '8px', padding: '4px 6px', alignItems: 'stretch' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center', padding: '4px 8px' }}>
                 <legend>Thông tin phiếu</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed">Số HĐ:</span>
-                  <input className="classic-input" value={invoiceNo} readOnly style={{ flex: 1, minWidth: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Số HĐ:</span>
+                  <input className="classic-input" value={invoiceNo} readOnly style={{ width: '85px', textAlign: 'center', fontWeight: 'bold' }} />
                 </div>
-                <div className="form-row">
-                  <span className="form-label-fixed">Thời gian:</span>
-                  <input className="classic-input" value={getFormattedDate(currentDateTime)} readOnly style={{ width: '80px', minWidth: 0 }} />
-                  <input className="classic-input" value={getFormattedTime(currentDateTime)} readOnly style={{ width: '50px', minWidth: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Ngày:</span>
+                  <input className="classic-input" value={getFormattedDate(currentDateTime)} readOnly style={{ width: '80px', textAlign: 'center' }} />
+                  <input className="classic-input" value={getFormattedTime(currentDateTime)} readOnly style={{ width: '55px', textAlign: 'center' }} />
                 </div>
               </fieldset>
 
-              <fieldset className="classic-fieldset" style={{ flex: '2 1 500px', minWidth: '400px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <fieldset className="classic-fieldset" style={{ flex: '2 1 auto', display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', padding: '4px 8px' }}>
                 <legend>Khách hàng & Ghi chú</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed">Khách hàng:</span>
-                  <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, position: 'relative' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Khách hàng:</span>
+                  <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
                     <input 
                       className="classic-input" 
-                      style={{ flex: 1, minWidth: 0 }}
+                      style={{ flex: 1, minWidth: '100px', paddingRight: '16px' }}
                       value={customerSearchQuery}
                       onFocus={(e) => {
                         e.target.select();
@@ -1212,6 +1383,13 @@ function App() {
                       }}
                       placeholder="Tìm khách hàng..."
                     />
+                    <span style={{ 
+                      position: 'absolute', 
+                      right: '4px', 
+                      pointerEvents: 'none', 
+                      fontSize: '8px', 
+                      color: '#555' 
+                    }}>▼</span>
                     {isCustomerDropdownOpen && (
                       <div className="classic-dropdown-list" style={{
                         position: 'absolute',
@@ -1257,14 +1435,15 @@ function App() {
                     )}
                   </div>
                 </div>
-                <div className="form-row">
-                  <span className="form-label-fixed">Ghi chú:</span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 2 }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Ghi chú:</span>
                   <input 
                     className="classic-input" 
                     value={posNotes}
                     onChange={e => setPosNotes(e.target.value)}
                     onFocus={(e) => e.target.select()} 
-                    style={{ flex: 1, minWidth: 0 }} 
+                    style={{ flex: 1, minWidth: '180px' }} 
                   />
                 </div>
               </fieldset>
@@ -1370,7 +1549,7 @@ function App() {
                         )
                       })}
                       {/* Empty rows to fill space simulating classic grid */}
-                      {[...Array(5)].map((_, i) => (
+                      {[...Array(1)].map((_, i) => (
                         <tr key={`empty-${i}`}>
                           <td className="grid-readonly-cell" style={{ height: '22px' }}></td>
                           <td className="grid-readonly-cell"></td>
@@ -1466,24 +1645,45 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {posFilteredProducts.slice(0, posLimit).map(p => (
-                        <tr
-                          key={p.id}
-                          tabIndex={0}
-                          className={selectedProduct?.id === p.id ? "selected" : ""}
-                          onClick={() => setSelectedProduct(p)}
-                          onDoubleClick={() => addToCart(p)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') addToCart(p);
-                          }}
-                        >
-                           <td>{p.sku}</td>
-                          <td>{p.name}</td>
-                          <td>{p.unit}</td>
-                          <td className="text-right">{formatVND(p.price)}</td>
-                          <td className="text-right">0</td>
-                        </tr>
-                      ))}
+                      {posFilteredProducts.slice(0, posLimit).map(p => {
+                        const isAvailable = p.available !== false;
+                        const isSelected = selectedProduct?.id === p.id && isAvailable;
+                        return (
+                          <tr
+                            key={p.id}
+                            tabIndex={isAvailable ? 0 : -1}
+                            className={isSelected ? "selected" : ""}
+                            onClick={() => {
+                              if (isAvailable) {
+                                setSelectedProduct(p);
+                              }
+                            }}
+                            onDoubleClick={() => {
+                              if (isAvailable) {
+                                addToCart(p);
+                              }
+                            }}
+                            onKeyDown={e => {
+                              if (isAvailable && e.key === 'Enter') {
+                                addToCart(p);
+                              }
+                            }}
+                            style={isAvailable ? { cursor: 'pointer' } : {
+                              opacity: 0.55,
+                              backgroundColor: '#f5f5f5',
+                              color: '#888',
+                              cursor: 'not-allowed',
+                              textDecoration: 'line-through'
+                            }}
+                          >
+                             <td>{p.sku}</td>
+                            <td>{p.name}</td>
+                            <td>{p.unit}</td>
+                            <td className="text-right">{formatVND(p.price)}</td>
+                            <td className="text-right">0</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1549,6 +1749,7 @@ function App() {
                   onChange={e => setInventoryAvailableFilter(e.target.value)}
                 >
                   <option value="active">Hàng còn bán</option>
+                  <option value="inactive">Không còn bán</option>
                   <option value="all">Tất cả</option>
                 </select>
                 <span style={{ fontSize: '11px', fontWeight: 'bold' }}>ĐVT:</span>
@@ -1594,6 +1795,9 @@ function App() {
               <button className="tool-btn" onClick={handleExportCSV}>
                 <span className="tool-icon">📤</span>Export
               </button>
+              <button className="tool-btn" onClick={handleDownloadTemplate}>
+                <span className="tool-icon">📋</span>Tải mẫu
+              </button>
             </div>
 
             {/* Main Inventory Grid */}
@@ -1636,20 +1840,30 @@ function App() {
                         data-product-row="true"
                         className={isSelected ? "selected-row" : ""}
                         onClick={() => setSelectedProduct(p)}
-                        style={{ cursor: 'pointer' }}
+                        style={{ 
+                          cursor: 'pointer',
+                          color: isSelected ? undefined : (p.available === false ? '#777' : undefined),
+                          backgroundColor: isSelected ? undefined : (p.available === false ? '#f2f2f2' : undefined)
+                        }}
                       >
                         {isSelected ? (
                           <>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
-                                value={p.link || ""}
-                                onChange={e => updateProductField(p.id, 'link', e.target.value)}
-                                onBlur={e => updateProductField(p.id, 'link', e.target.value, true)}
-                                onClick={e => e.stopPropagation()}
-                                placeholder="URL ảnh"
-                              />
+                            <td 
+                              className="text-center" 
+                              style={{ padding: '2px', cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProduct(p);
+                                setImageEditProduct(p);
+                                setImageEditLink(p.link || "");
+                              }}
+                              title="Click để sửa hình ảnh"
+                            >
+                              {p.link ? (
+                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #0056b3' }} />
+                              ) : (
+                                <span style={{ color: '#0056b3', fontSize: '10px', textDecoration: 'underline' }}>[Sửa ảnh]</span>
+                              )}
                             </td>
                             <td style={{ padding: '1px' }}>
                               <input
@@ -1705,10 +1919,41 @@ function App() {
                                 onClick={e => e.stopPropagation()}
                               />
                             </td>
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                type="number"
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                                value={p.price2 || 0}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'price2', val);
+                                  }
+                                }}
+                                onBlur={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'price2', val, true);
+                                  }
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
                           </>
                         ) : (
                           <>
-                            <td className="text-center" style={{ padding: '2px' }}>
+                            <td 
+                              className="text-center" 
+                              style={{ padding: '2px', cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProduct(p);
+                                setImageEditProduct(p);
+                                setImageEditLink(p.link || "");
+                              }}
+                              title="Click để sửa hình ảnh"
+                            >
                               {p.link ? (
                                 <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} />
                               ) : (
@@ -1719,9 +1964,9 @@ function App() {
                             <td>{p.name}</td>
                             <td>{p.unit}</td>
                             <td className="text-right">{formatVND(p.price)}</td>
+                            <td className="text-right">{formatVND(p.price2 || 0)}</td>
                           </>
                         )}
-                        <td className="text-right">0</td>
                         <td className="text-center" style={{ padding: '2px' }}>
                           <input
                             type="checkbox"
@@ -1760,28 +2005,9 @@ function App() {
                           <button
                             className="classic-btn"
                             style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm(`Bạn có chắc chắn muốn xóa mặt hàng "${p.name}" không?`)) {
-                                if (mssqlServer && mssqlUser) {
-                                  try {
-                                    await tauriInvoke("delete_product_db", {
-                                      server: mssqlServer,
-                                      dbName: mssqlDbName,
-                                      user: mssqlUser,
-                                      pass: mssqlPass,
-                                      id: Number(p.id) || 0
-                                    });
-                                  } catch (err: any) {
-                                    alert("Lỗi khi xóa mặt hàng từ CSDL: " + err.toString());
-                                    return;
-                                  }
-                                }
-                                setProducts(prev => prev.filter(item => item.id !== p.id));
-                                if (selectedProduct?.id === p.id) {
-                                  setSelectedProduct(null);
-                                }
-                              }
+                              setProductToDelete(p);
                             }}
                           >
                             Xóa
@@ -1811,6 +2037,20 @@ function App() {
               }}><span className="tool-icon">➕</span>Thêm KH</button>
               
 
+
+              <button className="tool-btn" onClick={() => {
+                if (selectedCustomerIdx === null) {
+                  alert("Vui lòng chọn khách hàng cần thêm nợ!");
+                  return;
+                }
+                const cust = customers[selectedCustomerIdx];
+                if (cust.id === '1') {
+                  alert("Khách lẻ mặc định không thể ghi nợ!");
+                  return;
+                }
+                setAddDebtAmount(0);
+                setIsAddDebtModalOpen(true);
+              }}><span className="tool-icon">📝</span>Thêm nợ</button>
 
               <button className="tool-btn" onClick={() => {
                 if (selectedCustomerIdx === null) {
@@ -1930,26 +2170,8 @@ function App() {
                                 onClick={e => e.stopPropagation()}
                               />
                             </td>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                type="number"
-                                className="classic-input text-right"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000', fontWeight: 'bold' }}
-                                value={c.debt}
-                                onChange={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateCustomerField(c.id, 'debt', val);
-                                  }
-                                }}
-                                onBlur={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateCustomerField(c.id, 'debt', val, true);
-                                  }
-                                }}
-                                onClick={e => e.stopPropagation()}
-                              />
+                            <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
+                              {formatVND(c.debt)}đ
                             </td>
                           </>
                         ) : (
@@ -2111,9 +2333,20 @@ function App() {
                   onFocus={(e) => e.target.select()}
                 />
               </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Đơn giá 2:</span>
+                <input 
+                  type="number" 
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={editForm.price2 || 0} 
+                  onChange={e => setEditForm({ ...editForm, price2: Math.max(0, Number(e.target.value)) })} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
               
               <div className="dialog-buttons">
-                <button className="classic-btn" onClick={handleSaveProductEdit}>Ghi lại</button>
+                <button className="classic-btn" onClick={handleSaveProductEdit}>Lưu</button>
                 <button className="classic-btn" onClick={() => setEditingProduct(null)}>Hủy bỏ</button>
               </div>
             </div>
@@ -2470,6 +2703,79 @@ function App() {
         </div>
       )}
 
+      {isAddDebtModalOpen && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '280px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">Thêm nợ khách hàng</span>
+              <button className="dialog-close-btn" onClick={() => setIsAddDebtModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div style={{ fontSize: '11px', marginBottom: '8px' }}>
+                Khách hàng: <strong>{selectedCustomerIdx !== null && customers[selectedCustomerIdx] ? customers[selectedCustomerIdx].name : ""}</strong>
+              </div>
+              <div style={{ fontSize: '11px', marginBottom: '8px' }}>
+                Tổng công nợ hiện tại: <strong>{selectedCustomerIdx !== null && customers[selectedCustomerIdx] ? formatVND(customers[selectedCustomerIdx].debt) : 0}đ</strong>
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed" style={{ minWidth: '85px' }}>Số tiền thêm nợ:</span>
+                <input 
+                  type="number"
+                  className="classic-input" 
+                  style={{ flex: 1 }} 
+                  value={addDebtAmount} 
+                  onChange={e => setAddDebtAmount(Math.max(0, Number(e.target.value)))} 
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className="dialog-buttons">
+                 <button className="classic-btn" onClick={async () => {
+                  if (selectedCustomerIdx === null || !customers[selectedCustomerIdx]) return;
+                  const cust = customers[selectedCustomerIdx];
+                  if (addDebtAmount <= 0) {
+                    alert("Số tiền nợ thêm phải lớn hơn 0!");
+                    return;
+                  }
+
+                  const newDebt = cust.debt + addDebtAmount;
+                  const today = new Date();
+                  const month = today.getMonth() + 1;
+                  const year = today.getFullYear();
+
+                  if (mssqlServer && mssqlUser) {
+                    try {
+                      await tauriInvoke("save_customer_db", {
+                        server: mssqlServer,
+                        dbName: mssqlDbName,
+                        user: mssqlUser,
+                        pass: mssqlPass,
+                        customer: JSON.stringify({
+                          id: cust.id,
+                          name: cust.name,
+                          phone: cust.phone,
+                          address: cust.address,
+                          debt: newDebt
+                        }),
+                        month,
+                        year
+                      });
+                    } catch (err: any) {
+                      alert("Lỗi khi cập nhật công nợ vào CSDL: " + err.toString());
+                      return;
+                    }
+                  }
+
+                  setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: newDebt } : c));
+                  alert(`Đã thêm nợ ${formatVND(addDebtAmount)}đ cho khách hàng ${cust.name} thành công. Công nợ mới: ${formatVND(newDebt)}đ.`);
+                  setIsAddDebtModalOpen(false);
+                }}>Xác nhận</button>
+                <button className="classic-btn" onClick={() => setIsAddDebtModalOpen(false)}>Hủy bỏ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isPayDebtModalOpen && (
         <div className="modal-overlay">
           <div className="classic-dialog" style={{ width: '280px' }}>
@@ -2714,6 +3020,178 @@ function App() {
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
                 <button className="classic-btn" onClick={() => setIsUnitManagerOpen(false)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {customAlert && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="classic-dialog" style={{ width: '320px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
+            <div 
+              className="dialog-title-bar" 
+              style={{
+                background: customAlert.type === 'error' 
+                  ? 'linear-gradient(90deg, #a00000, #ff5050)' 
+                  : customAlert.type === 'warning'
+                    ? 'linear-gradient(90deg, #a08000, #ffd700)'
+                    : 'linear-gradient(90deg, #000080, #1084d0)',
+                color: '#fff'
+              }}
+            >
+              <span className="dialog-title">{customAlert.title}</span>
+              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setCustomAlert(null)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ fontSize: '24px' }}>
+                  {customAlert.type === 'error' ? '❌' : customAlert.type === 'warning' ? '⚠️' : 'ℹ️'}
+                </span>
+                <div style={{ fontSize: '12px', whiteSpace: 'pre-line', lineHeight: '1.4', color: '#000', flex: 1 }}>
+                  {customAlert.message}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '70px', height: '23px', fontWeight: 'bold' }} 
+                  onClick={() => setCustomAlert(null)}
+                  autoFocus
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {productToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="classic-dialog" style={{ width: '360px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
+            <div 
+              className="dialog-title-bar" 
+              style={{
+                background: 'linear-gradient(90deg, #a08000, #ffd700)',
+                color: '#fff'
+              }}
+            >
+              <span className="dialog-title">Xác nhận xóa</span>
+              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setProductToDelete(null)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ fontSize: '24px' }}>⚠️</span>
+                <div style={{ fontSize: '12px', whiteSpace: 'pre-line', lineHeight: '1.4', color: '#000', flex: 1 }}>
+                  Bạn có chắc chắn muốn xóa mặt hàng <strong>"{productToDelete.name}"</strong> không?
+                  <br />
+                  Hành động này không thể hoàn tác.
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '80px', height: '23px', fontWeight: 'bold', color: 'red' }} 
+                  onClick={handleConfirmDeleteProduct}
+                  autoFocus
+                >
+                  Xác nhận
+                </button>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '80px', height: '23px' }} 
+                  onClick={() => setProductToDelete(null)}
+                >
+                  Hủy bỏ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {imageEditProduct && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="classic-dialog" style={{ width: '420px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
+            <div 
+              className="dialog-title-bar" 
+              style={{
+                background: 'linear-gradient(90deg, #000080, #1084d0)',
+                color: '#fff'
+              }}
+            >
+              <span className="dialog-title">Hình ảnh mặt hàng</span>
+              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setImageEditProduct(null)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#0056b3', borderBottom: '1px solid #c0c0c0', paddingBottom: '4px' }}>
+                Mặt hàng: {imageEditProduct.name}
+              </div>
+              
+              {/* Image Preview Container */}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '8px' }}>
+                <div style={{ 
+                  width: '180px', 
+                  height: '180px', 
+                  border: '2px inset #808080', 
+                  background: '#f0f0f0', 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  overflow: 'hidden'
+                }}>
+                  {imageEditLink ? (
+                    <img 
+                      src={imageEditLink} 
+                      alt="Preview" 
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                    />
+                  ) : (
+                    <span style={{ color: '#808080', fontSize: '11px', fontStyle: 'italic' }}>Chưa có hình ảnh</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* URL/Link Input */}
+              <div className="form-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Đường dẫn hình ảnh (URL):</span>
+                <textarea 
+                  className="classic-input" 
+                  style={{ width: '100%', height: '50px', padding: '4px', fontSize: '11px', resize: 'none' }} 
+                  value={imageEditLink} 
+                  onChange={e => setImageEditLink(e.target.value)} 
+                  placeholder="Dán link hình ảnh tại đây..."
+                />
+              </div>
+
+              {imageEditLink && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
+                  <button 
+                    className="classic-btn" 
+                    style={{ height: '24px', color: 'red', width: '100%' }}
+                    onClick={() => setImageEditLink("")}
+                  >
+                    Xóa ảnh
+                  </button>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '8px', borderTop: '1px solid #c0c0c0', paddingTop: '8px' }}>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '85px', height: '23px', fontWeight: 'bold' }} 
+                  onClick={handleSaveProductImage}
+                >
+                  Lưu
+                </button>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '85px', height: '23px' }} 
+                  onClick={() => setImageEditProduct(null)}
+                >
+                  Hủy bỏ
+                </button>
               </div>
             </div>
           </div>

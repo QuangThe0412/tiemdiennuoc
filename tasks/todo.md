@@ -1,37 +1,28 @@
-# Kế hoạch Thực hiện - Cập nhật Giao diện & Import/Export Sản phẩm
+# Kế hoạch Thực hiện - Tiếp tục Tinh chỉnh Tab Sản phẩm (Mặt hàng)
 
-## 1. Giao diện Tab Sản phẩm & Toolbar
-- [x] Đổi text nút "Thêm" thành "**Thêm mặt hàng**".
-- [x] Đổi text nút "Quản lý ĐVT" thành "**Đơn Vị Tính**".
-- [x] Điều chỉnh lại giao diện phần Lọc trên Toolbar của tab Sản phẩm để hợp lý và gọn gàng hơn.
+## 1. Đồng bộ chọn dòng khi sửa ảnh
+- [x] Cập nhật onClick của ô "Hình ảnh" ở cả chế độ được chọn (isSelected) và chưa được chọn (not isSelected). Khi click vào ô này để mở modal, gọi thêm `setSelectedProduct(p)` để đảm bảo dòng đó cũng được chọn.
 
-## 2. Hoàn thiện tính năng Import và Export
-- [x] **Export**:
-  - Xuất danh sách sản phẩm hiện tại ra định dạng file CSV chuẩn (hỗ trợ UTF-8 BOM để Excel hiển thị đúng tiếng Việt).
-  - Các cột xuất ra: `Mã hàng`, `Tên M.Hàng`, `ĐVT`, `Đơn giá`, `Kho`, `Hình ảnh`, `Còn bán`.
-- [x] **Import**:
-  - Thêm một thẻ `<input type="file" accept=".csv" />` ẩn để người dùng chọn tệp CSV.
-  - Phân tích cú pháp tệp CSV tải lên (hỗ trợ xử lý ký tự bao quanh bởi dấu ngoặc kép `"` và xuống dòng).
-  - Tự động kiểm tra trùng lặp `Mã hàng` (nếu trùng mã hàng thì cập nhật thông tin mới, nếu chưa có thì thêm mới).
-  - Tự động cập nhật danh sách `units` (ĐVT) nếu trong file import xuất hiện các ĐVT chưa có trong hệ thống.
-  - Hiển thị thông báo tổng kết số lượng mặt hàng đã thêm mới và số lượng mặt hàng được cập nhật.
+## 2. Ảnh chỉ dùng URL (Không dùng Base64)
+- [x] Gỡ bỏ hàm `handleImageFileChange`.
+- [x] Gỡ bỏ nút "Chọn ảnh từ máy tính" và input file ẩn trong modal `imageEditProduct`.
+- [x] Đảm bảo preview hình ảnh hoạt động dựa trên link URL thuần.
 
-## 3. Hệ thống Lưu trữ & Cấu hình CSDL MSSQL
-- [x] Lưu trữ cấu hình hệ thống (zoom, MSSQL credentials) dưới dạng tệp `setting.json` tại thư mục AppData/AppConfig của ứng dụng.
-- [x] Cập nhật giao diện Modal Cấu hình Hệ thống:
-  - Thêm hiển thị đường dẫn tệp `setting.json` và nút "**📁 Mở thư mục**" để mở thư mục lưu cấu hình.
-  - Thêm form nhập thông tin cấu hình kết nối MSSQL (Server IP/Name, Database, Tài khoản, Mật khẩu).
-  - Thêm nút "**🔌 Kiểm tra kết nối**" kèm hiển thị phản hồi kết quả trực quan (Thành công/Thất bại).
-- [x] Đồng bộ hóa tải/lưu cấu hình giữa giao diện (React) và backend (Rust/Tauri commands).
+## 3. Đổi nhãn nút từ "Ghi lại" thành "Lưu"
+- [x] Đổi text "Ghi lại" thành "Lưu" trong modal thêm/sửa sản phẩm (`editForm` modal).
+- [x] Đổi text "Ghi lại" thành "Lưu" trong modal sửa ảnh (`imageEditProduct` modal).
 
-## 4. Tích hợp Dữ liệu MSSQL Thực tế
-- [x] Đọc và ghi dữ liệu mặt hàng thông qua bảng `Mon` và `AnhMon` (dạng `varbinary`).
-- [x] Đọc và ghi thông tin khách hàng thông qua bảng `KhachHang` và lịch sử công nợ `CongNoKH`.
-- [x] Thiết lập nút Khóa/Mở khóa kết nối CSDL trong bảng cấu hình hệ thống.
-- [x] Điều chỉnh nút Kiểm tra kết nối hoạt động trong cả hai trạng thái Khóa (block) và Mở khóa (unblock).
-- [x] Loại bỏ hoàn toàn dữ liệu mockup cũ (`initialProducts` và `initialCustomers`) để ứng dụng sử dụng 100% dữ liệu thực từ CSDL khi kết nối thành công, hoặc khởi tạo danh sách trống nếu chưa kết nối.
+## 4. Hiển thị màu xám nhạt cho sản phẩm ngừng bán
+- [x] Trong bảng Sản phẩm, kiểm tra nếu `p.available === false` thì áp dụng style hoặc class màu chữ xám nhạt (ví dụ `#777` và background `#f2f2f2`) để dễ nhận biết.
 
-## 5. Kiểm thử & Xác nhận
-- [x] Chạy build kiểm tra lỗi biên dịch TypeScript.
-- [x] Dùng subagent browser để thực hiện xác thực giao diện cấu hình và tính năng kiểm tra kết nối MSSQL.
-- [x] Xác thực xóa bỏ dữ liệu mockup thành công.
+## 5. Kích hoạt nút Export hoạt động
+- [x] Tìm hiểu logic nút Export sản phẩm hiện tại trong `App.tsx`.
+- [x] Triển khai hàm xuất danh sách sản phẩm thành tệp CSV thông qua Tauri Command `save_file_to_downloads` (lưu trực tiếp vào thư mục Downloads).
+
+## 6. Thêm nút Download Template
+- [x] Thêm nút "Tải mẫu" (Download template) kế bên nút Import/Export trong tab Sản phẩm.
+- [x] Khi click vào, tạo một file CSV mẫu chứa một dòng mẫu sẵn (Mã hàng, Tên hàng, ĐVT, Đơn giá, Đơn giá 2, Còn bán, Kho) và tải xuống máy người dùng thông qua Tauri Command `save_file_to_downloads`.
+
+## 7. Kiểm tra biên dịch & hoạt động
+- [x] Sửa lỗi khóa ngoại `FK_Mon_LoaiMon` bằng cách query tự động IDLoaiMon đầu tiên từ DB.
+- [x] Biên dịch kiểm tra thành công.

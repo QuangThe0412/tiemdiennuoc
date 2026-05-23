@@ -322,11 +322,18 @@ async fn save_product_db(
             WHERE IDMon = @P8
         ", &[&name, &unit, &price, &price2, &cost, &stock, &active, &target_id]).await.map_err(|e| e.to_string())?;
     } else {
+        let mut loai_mon_id = 1;
+        let query_loai = client.query("SELECT TOP 1 IDLoaiMon FROM LoaiMon ORDER BY IDLoaiMon ASC", &[]).await.map_err(|e| e.to_string())?;
+        let row_loai = query_loai.into_row().await.map_err(|e| e.to_string())?;
+        if let Some(r) = row_loai {
+            loai_mon_id = r.get("IDLoaiMon").unwrap_or(1);
+        }
+
         let query = client.query("
             INSERT INTO Mon (IDLoaiMon, TenMon, TenKhongDau, MaTat, DVTMon, DonGiaHT, DonGiaHT2, DonGiaVon, TonKhoTT, VAT, ThoiGianBH, GhiChu, Active, TinhChatMon)
             OUTPUT INSERTED.IDMon
-            VALUES (1, @P1, @P1, @P2, @P3, @P4, @P5, @P6, @P7, 0, 0, '', @P8, 1);
-        ", &[&name, &sku, &unit, &price, &price2, &cost, &stock, &active]).await.map_err(|e| e.to_string())?;
+            VALUES (@P1, @P2, @P2, @P3, @P4, @P5, @P6, @P7, @P8, 0, 0, '', @P9, 1);
+        ", &[&loai_mon_id, &name, &sku, &unit, &price, &price2, &cost, &stock, &active]).await.map_err(|e| e.to_string())?;
         
         let row = query.into_row().await.map_err(|e| e.to_string())?;
         if let Some(r) = row {
@@ -450,11 +457,34 @@ async fn save_customer_db(
             WHERE IDKhachHang = @P4
         ", &[&name, &phone, &address, &target_id]).await.map_err(|e| e.to_string())?;
     } else {
+        let mut loai_kh_id = 1;
+        let mut found_id = None;
+
+        {
+            if let Ok(query_loai) = client.query("SELECT TOP 1 IDLoaiKH FROM LoaiKH ORDER BY IDLoaiKH ASC", &[]).await {
+                if let Ok(Some(r)) = query_loai.into_row().await {
+                    found_id = r.get("IDLoaiKH");
+                }
+            }
+        }
+
+        if let Some(id) = found_id {
+            loai_kh_id = id;
+        } else {
+            if let Ok(query_loai2) = client.query("SELECT TOP 1 IDLoaiKH FROM LoaiKhachHang ORDER BY IDLoaiKH ASC", &[]).await {
+                if let Ok(Some(r2)) = query_loai2.into_row().await {
+                    if let Some(id2) = r2.get("IDLoaiKH") {
+                        loai_kh_id = id2;
+                    }
+                }
+            }
+        }
+
         let query = client.query("
             INSERT INTO KhachHang (MaKhachHang, TenKhachHang, DiaChiKH, DienThoai, Fax, Email, MaSoThue, SoTaiKhoan, NguoiLienHe, ChucVuNLH, DienThoaiNLH, IDLoaiKH, ThongTinKhac, TenKhongDau, NguoiLienHe2, ChucVuNLH2, DienThoaiNLH2)
             OUTPUT INSERTED.IDKhachHang
-            VALUES ('', @P1, @P2, @P3, '', '', '', '', '', '', '', 1, '', '', '', '', '');
-        ", &[&name, &address, &phone]).await.map_err(|e| e.to_string())?;
+            VALUES ('', @P2, @P3, @P4, '', '', '', '', '', '', '', @P1, '', '', '', '', '');
+        ", &[&loai_kh_id, &name, &address, &phone]).await.map_err(|e| e.to_string())?;
         
         let row = query.into_row().await.map_err(|e| e.to_string())?;
         if let Some(r) = row {
@@ -506,6 +536,30 @@ async fn delete_customer_db(
     Ok("Xóa khách hàng thành công!".to_string())
 }
 
+#[tauri::command]
+async fn save_file_to_downloads(file_name: String, content: String) -> Result<String, String> {
+    use std::env;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    let base_dir = env::var("USERPROFILE")
+        .or_else(|_| env::var("HOME"))
+        .map_err(|_| "Could not find home directory".to_string())?;
+
+    let mut path = PathBuf::from(base_dir);
+    path.push("Downloads");
+    if !path.exists() {
+        path = env::current_dir().map_err(|e| e.to_string())?;
+    }
+    path.push(file_name);
+
+    let mut file = File::create(&path).map_err(|e| e.to_string())?;
+    file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -526,7 +580,8 @@ pub fn run() {
             delete_product_db,
             fetch_customers_db,
             save_customer_db,
-            delete_customer_db
+            delete_customer_db,
+            save_file_to_downloads
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
