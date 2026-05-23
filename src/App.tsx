@@ -1,7 +1,43 @@
 import { useState, useEffect, useRef } from "react";
-import { initialProducts } from "./seedData";
 import { Product, CartItem } from "./types";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
+const tauriInvoke = async (cmd: string, args: any = {}): Promise<any> => {
+  if (isTauri) {
+    return invoke(cmd, args);
+  }
+  // Mock implementations for web browser
+  if (cmd === "load_settings") {
+    const saved = localStorage.getItem("setting.json");
+    return saved || "{}";
+  }
+  if (cmd === "save_settings") {
+    localStorage.setItem("setting.json", args.settings);
+    return;
+  }
+  if (cmd === "get_config_path") {
+    return "Trình duyệt (localStorage: setting.json)";
+  }
+  if (cmd === "open_config_folder") {
+    alert("Thư mục cấu hình chỉ mở được khi chạy trên Ứng dụng Desktop!");
+    return;
+  }
+  if (cmd === "test_mssql_connection") {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (!args.server || !args.user) {
+          reject("Thiếu thông tin kết nối (Server hoặc Username)!");
+        } else {
+          resolve(`Kết nối thành công (giả lập) tới Database '${args.dbName}' trên Server '${args.server}'!`);
+        }
+      }, 800);
+    });
+  }
+  return null;
+};
 
 const removeAccents = (str: string): string => {
   return str
@@ -34,10 +70,7 @@ function App() {
 
   // Customer State
   const [customers, setCustomers] = useState<Customer[]>([
-    { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 },
-    { id: '2', name: 'Nguyễn Văn A', phone: '0901234567', address: '123 Đường Lớn', debt: 150000 },
-    { id: '3', name: 'Trần Thị B', phone: '0987654321', address: '45 Ngõ Nhỏ', debt: 0 },
-    { id: '4', name: 'Công ty Điện nước Đại Việt', phone: '0243555666', address: 'KCN Bắc Thăng Long', debt: 5000000 },
+    { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 }
   ]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerIdx, setSelectedCustomerIdx] = useState<number | null>(null);
@@ -75,21 +108,22 @@ function App() {
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [posNotes, setPosNotes] = useState("");
   const [selectedUnitFilter, setSelectedUnitFilter] = useState("");
-  const [units, setUnits] = useState<string[]>(() => {
-    const uniq = Array.from(new Set(initialProducts.map(p => p.unit).filter(Boolean)));
-    return uniq.length > 0 ? uniq : ["Cuộn", "Cái", "Cây", "Bộ", "Mét", "Thùng"];
-  });
+  const [units, setUnits] = useState<string[]>(["Cuộn", "Cái", "Cây", "Bộ", "Mét", "Thùng"]);
   const [newUnitName, setNewUnitName] = useState("");
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
-  const [zoom, setZoom] = useState(() => {
-    const saved = localStorage.getItem("app_zoom");
-    return saved ? Number(saved) : 100;
-  });
-  const [tempZoom, setTempZoom] = useState(zoom);
+  const [zoom, setZoom] = useState(100);
+  const [tempZoom, setTempZoom] = useState(100);
+  const [mssqlServer, setMssqlServer] = useState("");
+  const [mssqlDbName, setMssqlDbName] = useState("tiemdiennuoc");
+  const [mssqlUser, setMssqlUser] = useState("sa");
+  const [mssqlPass, setMssqlPass] = useState("");
+  const [mssqlTestResult, setMssqlTestResult] = useState<{ success: boolean; msg: string } | null>(null);
+  const [configFilePath, setConfigFilePath] = useState("");
+  const [dbLocked, setDbLocked] = useState(true);
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -117,6 +151,8 @@ function App() {
   // Inventory State
   const [inventorySearch, setInventorySearch] = useState("");
   const [inventoryUnitFilter, setInventoryUnitFilter] = useState("");
+  const [inventoryAvailableFilter, setInventoryAvailableFilter] = useState("active");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appContainerRef = useRef<HTMLDivElement>(null);
@@ -220,10 +256,50 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
 
-  useEffect(() => {
-    // Tạm thời nạp dữ liệu mẫu
-    setProducts(initialProducts);
-  }, []);
+  const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
+    const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
+    if (!serverVal || !userVal) {
+      setProducts([]);
+      setCustomers([baseCustomer]);
+      return;
+    }
+    try {
+      const rawProds = await tauriInvoke("fetch_products_db", {
+        server: serverVal,
+        dbName: dbVal,
+        user: userVal,
+        pass: passVal
+      }) as string;
+      const parsedProds = JSON.parse(rawProds);
+      if (Array.isArray(parsedProds)) {
+        setProducts(parsedProds);
+      } else {
+        setProducts([]);
+      }
+
+      const rawCusts = await tauriInvoke("fetch_customers_db", {
+        server: serverVal,
+        dbName: dbVal,
+        user: userVal,
+        pass: passVal
+      }) as string;
+      const parsedCusts = JSON.parse(rawCusts);
+      if (Array.isArray(parsedCusts)) {
+        const hasKhachLe = parsedCusts.some(c => c.id === '1' || c.name === 'Khách lẻ');
+        if (hasKhachLe) {
+          setCustomers(parsedCusts);
+        } else {
+          setCustomers([baseCustomer, ...parsedCusts]);
+        }
+      } else {
+        setCustomers([baseCustomer]);
+      }
+    } catch (err) {
+      console.warn("Could not connect to MSSQL, fallback to empty/default arrays:", err);
+      setProducts([]);
+      setCustomers([baseCustomer]);
+    }
+  };
 
   useEffect(() => {
     if (editingProduct) {
@@ -240,6 +316,39 @@ function App() {
     }
   }, [editingProduct]);
 
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  useEffect(() => {
+    const loadSettingsOnInit = async () => {
+      try {
+        const path = await tauriInvoke("get_config_path") as string;
+        setConfigFilePath(path);
+
+        const rawSettings = await tauriInvoke("load_settings") as string;
+        const settings = JSON.parse(rawSettings);
+        if (settings.zoom) {
+          setZoom(settings.zoom);
+          setTempZoom(settings.zoom);
+        }
+        const sServer = settings.mssqlServer || "";
+        const sDb = settings.mssqlDbName || "tiemdiennuoc";
+        const sUser = settings.mssqlUser || "";
+        const sPass = settings.mssqlPass || "";
+
+        if (sServer) setMssqlServer(sServer);
+        if (sDb) setMssqlDbName(sDb);
+        if (sUser) setMssqlUser(sUser);
+        if (sPass) setMssqlPass(sPass);
+
+        await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+        setProducts([]);
+      }
+    };
+    loadSettingsOnInit();
+  }, []);
+
   useEffect(() => {
     document.documentElement.style.zoom = '100%';
     const appEl = appContainerRef.current;
@@ -249,14 +358,61 @@ function App() {
       appEl.style.width = `calc(100vw / ${zFactor})`;
       appEl.style.height = `calc(100vh / ${zFactor})`;
     }
-    localStorage.setItem("app_zoom", zoom.toString());
   }, [zoom]);
 
   useEffect(() => {
     if (isSystemModalOpen) {
       setTempZoom(zoom);
+      setMssqlTestResult(null);
+      setDbLocked(true);
     }
   }, [isSystemModalOpen, zoom]);
+
+  const handleSaveSettings = async () => {
+    try {
+      const settingsObj = {
+        zoom: tempZoom,
+        mssqlServer,
+        mssqlDbName,
+        mssqlUser,
+        mssqlPass
+      };
+      await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
+      setZoom(tempZoom);
+      setIsSystemModalOpen(false);
+      setMssqlTestResult(null);
+      await loadDataFromMSSQL(mssqlServer, mssqlDbName, mssqlUser, mssqlPass);
+      alert("Đã lưu cấu hình hệ thống thành công và đồng bộ dữ liệu CSDL!");
+    } catch (err: any) {
+      alert("Lỗi khi lưu cấu hình: " + err.toString());
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setMssqlTestResult(null);
+    try {
+      const res = await tauriInvoke("test_mssql_connection", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass
+      });
+      setMssqlTestResult({ success: true, msg: res });
+    } catch (err: any) {
+      setMssqlTestResult({ success: false, msg: err.toString() });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleOpenConfigFolder = async () => {
+    try {
+      await tauriInvoke("open_config_folder");
+    } catch (err: any) {
+      alert("Không thể mở thư mục cấu hình: " + err.toString());
+    }
+  };
 
   useEffect(() => {
     if (editingProduct || isSystemModalOpen || isCustomerModalOpen || isPayDebtModalOpen || isPendingModalOpen || isCheckoutModalOpen || isUnitManagerOpen) {
@@ -377,6 +533,198 @@ function App() {
     }
   };
 
+  const parseCSV = (text: string): string[][] => {
+    const result: string[][] = [];
+    let row: string[] = [];
+    let col = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+      if (inQuotes) {
+        if (char === '"') {
+          if (nextChar === '"') {
+            col += '"';
+            i++; // Skip next quote
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          col += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          row.push(col);
+          col = "";
+        } else if (char === '\r' || char === '\n') {
+          row.push(col);
+          col = "";
+          if (row.some(c => c.trim() !== "")) {
+            result.push(row);
+          }
+          row = [];
+          if (char === '\r' && nextChar === '\n') {
+            i++; // Skip LF if CRLF
+          }
+        } else {
+          col += char;
+        }
+      }
+    }
+    if (col !== "" || row.length > 0) {
+      row.push(col);
+      if (row.some(c => c.trim() !== "")) {
+        result.push(row);
+      }
+    }
+    return result;
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Kho", "Hình ảnh", "Còn bán"];
+    const rows = products.map(p => [
+      p.sku,
+      p.name,
+      p.unit,
+      p.price.toString(),
+      p.stock.toString(),
+      p.link || "",
+      p.available !== false ? "1" : "0"
+    ]);
+    const csvContent = "\uFEFF" + [
+      headers.join(","),
+      ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `danh_sach_san_pham_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const triggerImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const parsedRows = parseCSV(text);
+      if (parsedRows.length <= 1) {
+        alert("Tệp CSV rỗng hoặc không có dữ liệu!");
+        return;
+      }
+
+      const headers = parsedRows[0].map(h => h.trim().toLowerCase());
+      const skuIdx = headers.indexOf("mã hàng");
+      const nameIdx = headers.indexOf("tên m.hàng");
+      const unitIdx = headers.indexOf("đvt");
+      const priceIdx = headers.indexOf("đơn giá");
+      const stockIdx = headers.indexOf("kho");
+      const linkIdx = headers.indexOf("hình ảnh");
+      const availableIdx = headers.indexOf("còn bán");
+
+      if (skuIdx === -1 || nameIdx === -1) {
+        alert("File CSV không đúng định dạng. Cần có ít nhất cột 'Mã hàng' và 'Tên M.Hàng'!");
+        return;
+      }
+
+      let addedCount = 0;
+      let updatedCount = 0;
+      const importedProducts = [...products];
+      const newlyDiscoveredUnits = new Set<string>();
+
+      for (let i = 1; i < parsedRows.length; i++) {
+        const row = parsedRows[i];
+        if (row.length === 0) continue;
+
+        const sku = row[skuIdx]?.trim();
+        const name = row[nameIdx]?.trim();
+
+        if (!sku || !name) continue;
+
+        const unit = unitIdx !== -1 ? row[unitIdx]?.trim() || "Cái" : "Cái";
+        const price = priceIdx !== -1 ? Number(row[priceIdx]) || 0 : 0;
+        const stock = stockIdx !== -1 ? Number(row[stockIdx]) || 0 : 0;
+        const link = linkIdx !== -1 ? row[linkIdx]?.trim() || "" : "";
+        
+        let available = true;
+        if (availableIdx !== -1) {
+          const val = row[availableIdx]?.trim().toLowerCase();
+          available = val === "1" || val === "true" || val === "còn bán" || val === "";
+        }
+
+        // Add unit to discovered list if not already in global list
+        if (unit && !units.includes(unit)) {
+          newlyDiscoveredUnits.add(unit);
+        }
+
+        const existingIdx = importedProducts.findIndex(p => p.sku.toLowerCase() === sku.toLowerCase());
+        if (existingIdx !== -1) {
+          // Update existing
+          importedProducts[existingIdx] = {
+            ...importedProducts[existingIdx],
+            name,
+            unit,
+            price,
+            stock,
+            link,
+            available
+          };
+          updatedCount++;
+        } else {
+          // Add new
+          const newId = (Math.max(...importedProducts.map(p => Number(p.id) || 0)) + 1).toString();
+          importedProducts.push({
+            id: newId,
+            sku,
+            name,
+            unit,
+            price,
+            cost: 0,
+            stock,
+            link,
+            available,
+            category: "Khác"
+          });
+          addedCount++;
+        }
+      }
+
+      setProducts(importedProducts);
+
+      if (newlyDiscoveredUnits.size > 0) {
+        setUnits(prev => {
+          const combined = [...prev];
+          newlyDiscoveredUnits.forEach(u => {
+            if (!combined.includes(u)) {
+              combined.push(u);
+            }
+          });
+          return combined;
+        });
+      }
+
+      alert(`Nhập dữ liệu thành công!\n- Thêm mới: ${addedCount} mặt hàng\n- Cập nhật: ${updatedCount} mặt hàng`);
+    };
+    reader.readAsText(file, "UTF-8");
+  };
+
   const addToCart = (p: Product) => {
     setCart(prev => {
       const existing = prev.find(c => c.product.id === p.id);
@@ -400,7 +748,7 @@ function App() {
     }
   };
 
-  const handleSaveProductEdit = () => {
+  const handleSaveProductEdit = async () => {
     if (!editingProduct || !editForm) return;
 
     if (editingProduct.id === "NEW") {
@@ -418,7 +766,9 @@ function App() {
         alert(`Mã hàng "${editForm.sku}" đã tồn tại!`);
         return;
       }
-      const newId = (Math.max(...products.map(p => Number(p.id) || 0)) + 1).toString();
+
+      let newId = (Math.max(...products.map(p => Number(p.id) || 0)) + 1).toString();
+      
       const newProd: Product = {
         id: newId,
         sku: editForm.sku,
@@ -431,10 +781,66 @@ function App() {
         link: editForm.link,
         available: editForm.available !== false,
       };
+
+      if (mssqlServer && mssqlUser) {
+        try {
+          const dbId = await tauriInvoke("save_product_db", {
+            server: mssqlServer,
+            dbName: mssqlDbName,
+            user: mssqlUser,
+            pass: mssqlPass,
+            product: JSON.stringify({
+              id: 0,
+              sku: editForm.sku,
+              name: editForm.name,
+              unit: editForm.unit,
+              price: editForm.price,
+              price2: 0,
+              cost: 0,
+              stock: 0,
+              available: editForm.available !== false,
+              link: editForm.link || ""
+            })
+          }) as string;
+          if (dbId) {
+            newProd.id = dbId;
+          }
+        } catch (err: any) {
+          alert("Lỗi lưu mặt hàng vào CSDL: " + err.toString());
+          return;
+        }
+      }
+
       setProducts(prev => [...prev, newProd]);
       alert(`Đã thêm mặt hàng "${editForm.name}" thành công.`);
     } else {
       // Editing existing product
+      if (mssqlServer && mssqlUser) {
+        try {
+          await tauriInvoke("save_product_db", {
+            server: mssqlServer,
+            dbName: mssqlDbName,
+            user: mssqlUser,
+            pass: mssqlPass,
+            product: JSON.stringify({
+              id: Number(editingProduct.id) || 0,
+              sku: editForm.sku,
+              name: editForm.name,
+              unit: editForm.unit,
+              price: editForm.price,
+              price2: 0,
+              cost: 0,
+              stock: 0,
+              available: editForm.available !== false,
+              link: editForm.link || ""
+            })
+          });
+        } catch (err: any) {
+          alert("Lỗi lưu mặt hàng vào CSDL: " + err.toString());
+          return;
+        }
+      }
+
       setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...editForm } : p));
 
       if (selectedProduct && selectedProduct.id === editingProduct.id) {
@@ -480,7 +886,7 @@ function App() {
     setSelectedCartIndex(null);
   };
 
-  const handleSellOnDebt = () => {
+  const handleSellOnDebt = async () => {
     if (cart.length === 0) {
       alert("Không có sản phẩm nào trong giỏ hàng để ghi nợ!");
       return;
@@ -490,9 +896,38 @@ function App() {
       return;
     }
     const totalToPay = getCartFinalTotal();
-    setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, debt: c.debt + totalToPay } : c));
-    setSelectedCustomer(prev => ({ ...prev, debt: prev.debt + totalToPay }));
-    alert(`Hóa đơn ${invoiceNo} bán nợ thành công cho ${selectedCustomer.name}.\nSố tiền ghi nợ: ${formatVND(totalToPay)}đ.\nCông nợ: ${formatVND(selectedCustomer.debt + totalToPay)}đ.`);
+    const newDebt = selectedCustomer.debt + totalToPay;
+    
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+
+    if (mssqlServer && mssqlUser) {
+      try {
+        await tauriInvoke("save_customer_db", {
+          server: mssqlServer,
+          dbName: mssqlDbName,
+          user: mssqlUser,
+          pass: mssqlPass,
+          customer: JSON.stringify({
+            id: selectedCustomer.id,
+            name: selectedCustomer.name,
+            phone: selectedCustomer.phone,
+            address: selectedCustomer.address,
+            debt: newDebt
+          }),
+          month,
+          year
+        });
+      } catch (err: any) {
+        alert("Lỗi khi ghi nợ vào CSDL: " + err.toString());
+        return;
+      }
+    }
+
+    setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, debt: newDebt } : c));
+    setSelectedCustomer(prev => ({ ...prev, debt: newDebt }));
+    alert(`Hóa đơn ${invoiceNo} bán nợ thành công cho ${selectedCustomer.name}.\nSố tiền ghi nợ: ${formatVND(totalToPay)}đ.\nCông nợ: ${formatVND(newDebt)}đ.`);
     
     // Reset POS
     setCart([]);
@@ -923,6 +1358,15 @@ function App() {
 
         {activeTab === "inventory" && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* Hidden Input for CSV Import */}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              accept=".csv" 
+              onChange={handleImportCSV} 
+            />
+
             {/* Inventory Toolbar */}
             <div className="toolbar">
               <button className="tool-btn" onClick={() => {
@@ -937,21 +1381,26 @@ function App() {
                   unit: units[0] || "Cái",
                 });
               }}>
-                <span className="tool-icon">➕</span>Thêm
+                <span className="tool-icon">➕</span>Thêm mặt hàng
               </button>
               <button className="tool-btn" onClick={() => setIsUnitManagerOpen(true)}>
-                <span className="tool-icon">📁</span>Quản lý ĐVT
+                <span className="tool-icon">📁</span>Đơn Vị Tính
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '4px' }}>
-                <span>Lọc:</span>
-                <select className="classic-input" style={{ width: '100px' }}>
-                  <option>Hàng còn bán</option>
-                  <option>Tất cả</option>
+              <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Trạng thái:</span>
+                <select 
+                  className="classic-input" 
+                  style={{ width: '110px' }}
+                  value={inventoryAvailableFilter}
+                  onChange={e => setInventoryAvailableFilter(e.target.value)}
+                >
+                  <option value="active">Hàng còn bán</option>
+                  <option value="all">Tất cả</option>
                 </select>
-                <span style={{ marginLeft: '10px' }}>ĐVT:</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>ĐVT:</span>
                 <select
                   className="classic-input"
-                  style={{ width: '120px' }}
+                  style={{ width: '90px' }}
                   value={inventoryUnitFilter}
                   onChange={e => setInventoryUnitFilter(e.target.value)}
                 >
@@ -960,28 +1409,20 @@ function App() {
                     <option key={u} value={u}>{u}</option>
                   ))}
                 </select>
-                <span style={{ marginLeft: '10px' }}>Tìm(F1)</span>
-                <input className="classic-input" style={{ width: '150px' }} value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} />
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Tìm (F1):</span>
+                <input 
+                  className="classic-input" 
+                  style={{ width: '150px', backgroundColor: '#ffe4e1' }} 
+                  value={inventorySearch} 
+                  onChange={e => setInventorySearch(e.target.value)} 
+                  placeholder="Mã hoặc tên..."
+                />
               </div>
               <div style={{ flex: 1 }}></div>
-              <button className="tool-btn" onClick={() => alert("Chức năng Nhập từ Excel đang được phát triển...")}>
+              <button className="tool-btn" onClick={triggerImportClick}>
                 <span className="tool-icon">📥</span>Import
               </button>
-              <button className="tool-btn" onClick={() => {
-                const headers = ["Mã hàng", "Tên M.Hàng", "ĐVT", "Đơn giá", "Kho"];
-                const rows = products.map(p => [p.sku, p.name, p.unit, p.price.toString(), p.stock.toString()]);
-                const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.setAttribute("href", url);
-                link.setAttribute("download", "danh_sach_san_pham.csv");
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                alert("Đã xuất danh sách sản phẩm ra tệp CSV thành công!");
-              }}>
+              <button className="tool-btn" onClick={handleExportCSV}>
                 <span className="tool-icon">📤</span>Export
               </button>
             </div>
@@ -1005,10 +1446,11 @@ function App() {
                 <tbody>
                   {products.filter(p => {
                     const matchesUnit = !inventoryUnitFilter || p.unit === inventoryUnitFilter;
+                    const matchesAvailable = inventoryAvailableFilter === "all" || p.available !== false;
                     const lowerSearch = removeAccents(inventorySearch.toLowerCase());
                     const nameNorm = removeAccents(p.name.toLowerCase());
                     const skuNorm = removeAccents(p.sku.toLowerCase());
-                    return matchesUnit && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
+                    return matchesUnit && matchesAvailable && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
                   }).map((p) => {
                     const isSelected = selectedProduct?.id === p.id;
                     return (
@@ -1125,9 +1567,23 @@ function App() {
                           <button
                             className="classic-btn"
                             style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
                               if (confirm(`Bạn có chắc chắn muốn xóa mặt hàng "${p.name}" không?`)) {
+                                if (mssqlServer && mssqlUser) {
+                                  try {
+                                    await tauriInvoke("delete_product_db", {
+                                      server: mssqlServer,
+                                      dbName: mssqlDbName,
+                                      user: mssqlUser,
+                                      pass: mssqlPass,
+                                      id: Number(p.id) || 0
+                                    });
+                                  } catch (err: any) {
+                                    alert("Lỗi khi xóa mặt hàng từ CSDL: " + err.toString());
+                                    return;
+                                  }
+                                }
                                 setProducts(prev => prev.filter(item => item.id !== p.id));
                                 if (selectedProduct?.id === p.id) {
                                   setSelectedProduct(null);
@@ -1176,7 +1632,7 @@ function App() {
                 setIsCustomerModalOpen(true);
               }}><span className="tool-icon">✏️</span>Sửa KH</button>
               
-              <button className="tool-btn" onClick={() => {
+              <button className="tool-btn" onClick={async () => {
                 if (selectedCustomerIdx === null) {
                   alert("Vui lòng chọn khách hàng cần xóa!");
                   return;
@@ -1187,6 +1643,20 @@ function App() {
                   return;
                 }
                 if (confirm(`Bạn có chắc chắn muốn xóa khách hàng "${cust.name}"?`)) {
+                  if (mssqlServer && mssqlUser) {
+                    try {
+                      await tauriInvoke("delete_customer_db", {
+                        server: mssqlServer,
+                        dbName: mssqlDbName,
+                        user: mssqlUser,
+                        pass: mssqlPass,
+                        id: Number(cust.id) || 0
+                      });
+                    } catch (err: any) {
+                      alert("Lỗi khi xóa khách hàng từ CSDL: " + err.toString());
+                      return;
+                    }
+                  }
                   setCustomers(prev => prev.filter(c => c.id !== cust.id));
                   setSelectedCustomerIdx(null);
                 }
@@ -1382,15 +1852,37 @@ function App() {
 
       {isSystemModalOpen && (
         <div className="modal-overlay">
-          <div className="classic-dialog" style={{ width: '280px' }}>
+          <div className="classic-dialog" style={{ width: '420px' }}>
             <div className="dialog-title-bar">
               <span className="dialog-title">Cấu hình Hệ thống</span>
               <button className="dialog-close-btn" onClick={() => setIsSystemModalOpen(false)}>✕</button>
             </div>
             <div className="dialog-body">
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Lưu trữ & Cấu hình File */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                <legend>Đường dẫn Cấu hình</legend>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: '#f0f0f0', fontSize: '10px' }} 
+                    value={configFilePath} 
+                    readOnly 
+                  />
+                  <button 
+                    className="classic-btn" 
+                    style={{ minWidth: '85px', height: '22px' }}
+                    onClick={handleOpenConfigFolder}
+                    title="Mở thư mục chứa file cấu hình"
+                  >
+                    📁 Mở thư mục
+                  </button>
+                </div>
+              </fieldset>
+
+              {/* Hiển thị & Thu phóng */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                 <legend>Hiển thị & Thu phóng</legend>
-                <div style={{ fontSize: '11px', marginBottom: '4px' }}>Tỷ lệ thu phóng ứng dụng:</div>
+                <div style={{ fontSize: '11px', marginBottom: '2px' }}>Tỷ lệ thu phóng ứng dụng:</div>
                 <select 
                   className="classic-input"
                   style={{ width: '100%', height: '22px' }}
@@ -1409,23 +1901,105 @@ function App() {
                   <option value={200}>200% (Rất lớn)</option>
                 </select>
               </fieldset>
+
+              {/* Kết nối MSSQL Database */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <legend style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '92%', margin: 0, padding: '0 4px' }}>
+                  <span style={{ fontWeight: 'bold' }}>Kết nối CSDL MSSQL</span>
+                  <button 
+                    className="classic-btn" 
+                    style={{ 
+                      height: '18px', 
+                      lineHeight: '16px', 
+                      padding: '0 6px', 
+                      fontSize: '10px', 
+                      cursor: 'pointer',
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '3px',
+                      backgroundColor: dbLocked ? '#fff3cd' : '#d4edda',
+                      borderColor: dbLocked ? '#ffeeba' : '#c3e6cb',
+                      color: dbLocked ? '#856404' : '#155724',
+                      fontWeight: 'normal'
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setDbLocked(!dbLocked);
+                    }}
+                  >
+                    {dbLocked ? "🔓 Mở khóa" : "🔒 Khóa lại"}
+                  </button>
+                </legend>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Server IP/Name:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
+                    value={mssqlServer} 
+                    onChange={e => setMssqlServer(e.target.value)} 
+                    placeholder="Ví dụ: localhost hoặc 192.168.1.10"
+                    disabled={dbLocked}
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên Database:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
+                    value={mssqlDbName} 
+                    onChange={e => setMssqlDbName(e.target.value)} 
+                    disabled={dbLocked}
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tài khoản:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
+                    value={mssqlUser} 
+                    onChange={e => setMssqlUser(e.target.value)} 
+                    disabled={dbLocked}
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Mật khẩu:</span>
+                  <input 
+                    type="password"
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
+                    value={mssqlPass} 
+                    onChange={e => setMssqlPass(e.target.value)} 
+                    disabled={dbLocked}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                  <button 
+                    className="classic-btn"
+                    style={{ minWidth: '120px' }}
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                  >
+                    {testingConnection ? "Đang kết nối..." : "🔌 Kiểm tra kết nối"}
+                  </button>
+
+                  {mssqlTestResult && (
+                    <span style={{ 
+                      fontSize: '11px', 
+                      fontWeight: 'bold', 
+                      color: mssqlTestResult.success ? '#006400' : '#8b0000',
+                      wordBreak: 'break-word',
+                      flex: 1
+                    }}>
+                      {mssqlTestResult.msg}
+                    </span>
+                  )}
+                </div>
+              </fieldset>
               
-              <div className="dialog-buttons" style={{ marginTop: '10px' }}>
-                <button 
-                  className="classic-btn" 
-                  onClick={() => {
-                    setZoom(tempZoom);
-                    setIsSystemModalOpen(false);
-                  }}
-                >
-                  Lưu lại
-                </button>
-                <button 
-                  className="classic-btn" 
-                  onClick={() => setIsSystemModalOpen(false)}
-                >
-                  Hủy bỏ
-                </button>
+              <div className="dialog-buttons" style={{ marginTop: '12px' }}>
+                <button className="classic-btn" onClick={handleSaveSettings}>Lưu lại</button>
+                <button className="classic-btn" onClick={() => setIsSystemModalOpen(false)}>Hủy bỏ</button>
               </div>
             </div>
           </div>
@@ -1545,16 +2119,68 @@ function App() {
                 />
               </div>
               <div className="dialog-buttons">
-                <button className="classic-btn" onClick={() => {
+                 <button className="classic-btn" onClick={async () => {
                   if (!customerForm.name.trim()) {
                     alert("Tên khách hàng không được để trống!");
                     return;
                   }
+                  
+                  const today = new Date();
+                  const month = today.getMonth() + 1;
+                  const year = today.getFullYear();
+
                   if (editingCustomer) {
+                    if (mssqlServer && mssqlUser) {
+                      try {
+                        await tauriInvoke("save_customer_db", {
+                          server: mssqlServer,
+                          dbName: mssqlDbName,
+                          user: mssqlUser,
+                          pass: mssqlPass,
+                          customer: JSON.stringify({
+                            id: editingCustomer.id,
+                            name: customerForm.name,
+                            phone: customerForm.phone,
+                            address: customerForm.address,
+                            debt: editingCustomer.debt
+                          }),
+                          month,
+                          year
+                        });
+                      } catch (err: any) {
+                        alert("Lỗi khi lưu khách hàng vào CSDL: " + err.toString());
+                        return;
+                      }
+                    }
                     setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, name: customerForm.name, phone: customerForm.phone, address: customerForm.address } : c));
                     alert(`Đã sửa thông tin khách hàng "${customerForm.name}" thành công.`);
                   } else {
-                    const newId = (Math.max(...customers.map(c => Number(c.id))) + 1).toString();
+                    let newId = (Math.max(...customers.map(c => Number(c.id) || 0)) + 1).toString();
+                    if (mssqlServer && mssqlUser) {
+                      try {
+                        const dbId = await tauriInvoke("save_customer_db", {
+                          server: mssqlServer,
+                          dbName: mssqlDbName,
+                          user: mssqlUser,
+                          pass: mssqlPass,
+                          customer: JSON.stringify({
+                            id: "0",
+                            name: customerForm.name,
+                            phone: customerForm.phone,
+                            address: customerForm.address,
+                            debt: customerForm.debt
+                          }),
+                          month,
+                          year
+                        }) as string;
+                        if (dbId) {
+                          newId = dbId;
+                        }
+                      } catch (err: any) {
+                        alert("Lỗi khi lưu khách hàng vào CSDL: " + err.toString());
+                        return;
+                      }
+                    }
                     setCustomers(prev => [...prev, {
                       id: newId,
                       name: customerForm.name,
@@ -1599,7 +2225,7 @@ function App() {
                 />
               </div>
               <div className="dialog-buttons">
-                <button className="classic-btn" onClick={() => {
+                 <button className="classic-btn" onClick={async () => {
                   if (selectedCustomerIdx === null || !customers[selectedCustomerIdx]) return;
                   const cust = customers[selectedCustomerIdx];
                   if (payDebtAmount <= 0) {
@@ -1610,8 +2236,37 @@ function App() {
                     alert(`Số tiền thu nợ (${formatVND(payDebtAmount)}đ) không được vượt quá số nợ hiện tại (${formatVND(cust.debt)}đ)!`);
                     return;
                   }
-                  setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: c.debt - payDebtAmount } : c));
-                  alert(`Đã thu nợ ${formatVND(payDebtAmount)}đ của khách hàng ${cust.name} thành công. Công nợ còn lại: ${formatVND(cust.debt - payDebtAmount)}đ.`);
+
+                  const newDebt = cust.debt - payDebtAmount;
+                  const today = new Date();
+                  const month = today.getMonth() + 1;
+                  const year = today.getFullYear();
+
+                  if (mssqlServer && mssqlUser) {
+                    try {
+                      await tauriInvoke("save_customer_db", {
+                        server: mssqlServer,
+                        dbName: mssqlDbName,
+                        user: mssqlUser,
+                        pass: mssqlPass,
+                        customer: JSON.stringify({
+                          id: cust.id,
+                          name: cust.name,
+                          phone: cust.phone,
+                          address: cust.address,
+                          debt: newDebt
+                        }),
+                        month,
+                        year
+                      });
+                    } catch (err: any) {
+                      alert("Lỗi khi cập nhật công nợ vào CSDL: " + err.toString());
+                      return;
+                    }
+                  }
+
+                  setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: newDebt } : c));
+                  alert(`Đã thu nợ ${formatVND(payDebtAmount)}đ của khách hàng ${cust.name} thành công. Công nợ còn lại: ${formatVND(newDebt)}đ.`);
                   setIsPayDebtModalOpen(false);
                 }}>Xác nhận</button>
                 <button className="classic-btn" onClick={() => setIsPayDebtModalOpen(false)}>Hủy bỏ</button>
