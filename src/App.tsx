@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Product, CartItem } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
@@ -150,12 +150,22 @@ function App() {
 
   // Inventory State
   const [inventorySearch, setInventorySearch] = useState("");
+  const [inventorySearchDebounced, setInventorySearchDebounced] = useState("");
+  const [customerSearchDebounced, setCustomerSearchDebounced] = useState("");
+  const [posSearchDebounced, setPosSearchDebounced] = useState("");
   const [inventoryUnitFilter, setInventoryUnitFilter] = useState("");
   const [inventoryAvailableFilter, setInventoryAvailableFilter] = useState("active");
+  const [posLimit, setPosLimit] = useState(100);
+  const [inventoryLimit, setInventoryLimit] = useState(100);
+  const [customerLimit, setCustomerLimit] = useState(100);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inventorySearchRef = useRef<HTMLInputElement>(null);
+  const customerSearchRef = useRef<HTMLInputElement>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appContainerRef = useRef<HTMLDivElement>(null);
+  const lastInventoryEscPress = useRef(0);
+  const lastCustomerEscPress = useRef(0);
 
   // Resize State for middle section
   const [middleHeight, setMiddleHeight] = useState(300);
@@ -167,6 +177,35 @@ function App() {
   const [selectedCartIndex, setSelectedCartIndex] = useState<number | null>(null);
 
   const lastEscPress = useRef<number>(0);
+
+  // Debounce: delay filter calculations by 150ms to reduce lag on fast typing
+  useEffect(() => {
+    const t = setTimeout(() => setPosSearchDebounced(posSearch), 150);
+    return () => clearTimeout(t);
+  }, [posSearch]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setInventorySearchDebounced(inventorySearch), 150);
+    return () => clearTimeout(t);
+  }, [inventorySearch]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setCustomerSearchDebounced(customerSearch), 150);
+    return () => clearTimeout(t);
+  }, [customerSearch]);
+
+  // Reset pagination limits when filters or search queries change
+  useEffect(() => {
+    setPosLimit(100);
+  }, [posSearchDebounced]);
+
+  useEffect(() => {
+    setInventoryLimit(100);
+  }, [inventorySearchDebounced, inventoryUnitFilter, inventoryAvailableFilter]);
+
+  useEffect(() => {
+    setCustomerLimit(100);
+  }, [customerSearchDebounced]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -219,17 +258,43 @@ function App() {
           return;
         }
         const now = Date.now();
-        if (now - lastEscPress.current < 500) {
-          setPosSearch("");
-        } else {
-          if (searchInputRef.current) {
-            searchInputRef.current.focus();
-            if (searchInputRef.current.value) {
-              searchInputRef.current.select();
+        if (activeTab === 'pos') {
+          if (now - lastEscPress.current < 500) {
+            setPosSearch("");
+          } else {
+            if (searchInputRef.current) {
+              searchInputRef.current.focus();
+              if (searchInputRef.current.value) {
+                searchInputRef.current.select();
+              }
             }
           }
+          lastEscPress.current = now;
+        } else if (activeTab === 'inventory') {
+          if (now - lastInventoryEscPress.current < 500) {
+            setInventorySearch("");
+          } else {
+            if (inventorySearchRef.current) {
+              inventorySearchRef.current.focus();
+              if (inventorySearchRef.current.value) {
+                inventorySearchRef.current.select();
+              }
+            }
+          }
+          lastInventoryEscPress.current = now;
+        } else if (activeTab === 'customers') {
+          if (now - lastCustomerEscPress.current < 500) {
+            setCustomerSearch("");
+          } else {
+            if (customerSearchRef.current) {
+              customerSearchRef.current.focus();
+              if (customerSearchRef.current.value) {
+                customerSearchRef.current.select();
+              }
+            }
+          }
+          lastCustomerEscPress.current = now;
         }
-        lastEscPress.current = now;
       }
       if (e.key === 'F1') {
         e.preventDefault();
@@ -254,7 +319,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
+  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers]);
 
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
     const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
@@ -441,11 +506,10 @@ function App() {
     return getCartBaseTotal() - getCartDiscountTotal();
   };
 
-  const updateProductField = (productId: string, field: keyof Product, value: any) => {
+  const updateProductField = useCallback((productId: string, field: keyof Product, value: any) => {
     setProducts(prev => prev.map(p => {
       if (p.id === productId) {
-        const updated = { ...p, [field]: value };
-        return updated;
+        return { ...p, [field]: value };
       }
       return p;
     }));
@@ -455,7 +519,7 @@ function App() {
       }
       return prevSel;
     });
-  };
+  }, []);
 
   const handleAddUnitInline = () => {
     if (!newUnitName || !newUnitName.trim()) {
@@ -734,6 +798,35 @@ function App() {
       return [...prev, { product: p, quantity: 1 }];
     });
   };
+
+  // Memoized filtered lists — only recompute when dependencies change
+  const posFilteredProducts = useMemo(() => {
+    const lowerSearch = removeAccents(posSearchDebounced.toLowerCase());
+    return products.filter(p => {
+      const nameNorm = removeAccents(p.name.toLowerCase());
+      const skuNorm = removeAccents(p.sku.toLowerCase());
+      return nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch);
+    });
+  }, [products, posSearchDebounced]);
+
+  const inventoryFilteredProducts = useMemo(() => {
+    const lowerSearch = removeAccents(inventorySearchDebounced.toLowerCase());
+    return products.filter(p => {
+      const matchesUnit = !inventoryUnitFilter || p.unit === inventoryUnitFilter;
+      const matchesAvailable = inventoryAvailableFilter === "all" || p.available !== false;
+      const nameNorm = removeAccents(p.name.toLowerCase());
+      const skuNorm = removeAccents(p.sku.toLowerCase());
+      return matchesUnit && matchesAvailable && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
+    });
+  }, [products, inventorySearchDebounced, inventoryUnitFilter, inventoryAvailableFilter]);
+
+  const filteredCustomers = useMemo(() => {
+    const query = removeAccents(customerSearchDebounced.toLowerCase());
+    return customers.filter(c => {
+      const nameNorm = removeAccents(c.name.toLowerCase());
+      return nameNorm.includes(query) || c.phone.includes(query);
+    });
+  }, [customers, customerSearchDebounced]);
 
   const handleSearchSubmit = () => {
     const lowerSearch = removeAccents(posSearch.toLowerCase());
@@ -1257,19 +1350,7 @@ function App() {
             {/* Bottom Section: Search & Product List */}
             <div className="pos-bottom-section">
               <div className="pos-search-bar">
-                <span style={{ fontSize: '11px', fontWeight: 'bold', marginLeft: '10px' }}>ĐVT:</span>
-                <select
-                  className="classic-input"
-                  style={{ width: '120px', marginLeft: '4px', marginRight: '6px' }}
-                  value={selectedUnitFilter}
-                  onChange={e => setSelectedUnitFilter(e.target.value)}
-                >
-                  <option value="">Tất cả</option>
-                  {units.map(u => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
-                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Mã/tên (Esc)</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', marginLeft: '10px' }}>Mã/tên (Esc)</span>
                 <input
                   ref={searchInputRef}
                   className="classic-input"
@@ -1291,10 +1372,22 @@ function App() {
                   Tìm
                 </button>
                 <div style={{ flex: 1 }}></div>
+                <span style={{ fontSize: '11px', color: 'var(--text-blue)', marginRight: '10px', fontWeight: 'bold' }}>
+                  Đã hiển thị: {Math.min(posLimit, posFilteredProducts.length)}/{posFilteredProducts.length} mặt hàng
+                </span>
               </div>
               <div style={{ display: 'flex', flex: 1, padding: '0 4px 4px 4px', minHeight: 0 }}>
                 {/* Search List Grid */}
-                <div className="grid-container" style={{ flex: 1, margin: '0 4px 0 0' }}>
+                <div 
+                  className="grid-container" 
+                  style={{ flex: 1, margin: '0 4px 0 0' }}
+                  onScroll={e => {
+                    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                    if (scrollHeight - scrollTop - clientHeight < 150) {
+                      setPosLimit(prev => Math.min(prev + 100, posFilteredProducts.length));
+                    }
+                  }}
+                >
                   <table className="data-grid">
                     <thead>
                       <tr>
@@ -1306,13 +1399,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.filter(p => {
-                        const matchesUnit = !selectedUnitFilter || p.unit === selectedUnitFilter;
-                        const lowerSearch = removeAccents(posSearch.toLowerCase());
-                        const nameNorm = removeAccents(p.name.toLowerCase());
-                        const skuNorm = removeAccents(p.sku.toLowerCase());
-                        return matchesUnit && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
-                      }).map(p => (
+                      {posFilteredProducts.slice(0, posLimit).map(p => (
                         <tr
                           key={p.id}
                           tabIndex={0}
@@ -1409,13 +1496,28 @@ function App() {
                     <option key={u} value={u}>{u}</option>
                   ))}
                 </select>
-                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Tìm (F1):</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Tìm (Esc):</span>
                 <input 
+                  ref={inventorySearchRef}
                   className="classic-input" 
                   style={{ width: '150px', backgroundColor: '#ffe4e1' }} 
                   value={inventorySearch} 
                   onChange={e => setInventorySearch(e.target.value)} 
                   placeholder="Mã hoặc tên..."
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      const now = Date.now();
+                      if (now - lastInventoryEscPress.current < 500) {
+                        setInventorySearch("");
+                      } else {
+                        e.currentTarget.focus();
+                        e.currentTarget.select();
+                      }
+                      lastInventoryEscPress.current = now;
+                      e.stopPropagation();
+                    }
+                  }}
                 />
               </div>
               <div style={{ flex: 1 }}></div>
@@ -1428,7 +1530,22 @@ function App() {
             </div>
 
             {/* Main Inventory Grid */}
-            <div className="grid-container" style={{ margin: '4px' }}>
+            <div 
+              className="grid-container" 
+              style={{ margin: '4px' }}
+              onMouseDown={e => {
+                // Deselect if clicking the container background (not a row)
+                if ((e.target as HTMLElement).tagName === 'TD' || (e.target as HTMLElement).tagName === 'TR') return;
+                if ((e.target as HTMLElement).closest('tr[data-product-row]')) return;
+                setSelectedProduct(null);
+              }}
+              onScroll={e => {
+                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                if (scrollHeight - scrollTop - clientHeight < 150) {
+                  setInventoryLimit(prev => Math.min(prev + 100, inventoryFilteredProducts.length));
+                }
+              }}
+            >
               <table className="data-grid">
                 <thead>
                   <tr>
@@ -1444,18 +1561,12 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.filter(p => {
-                    const matchesUnit = !inventoryUnitFilter || p.unit === inventoryUnitFilter;
-                    const matchesAvailable = inventoryAvailableFilter === "all" || p.available !== false;
-                    const lowerSearch = removeAccents(inventorySearch.toLowerCase());
-                    const nameNorm = removeAccents(p.name.toLowerCase());
-                    const skuNorm = removeAccents(p.sku.toLowerCase());
-                    return matchesUnit && matchesAvailable && (nameNorm.includes(lowerSearch) || skuNorm.includes(lowerSearch));
-                  }).map((p) => {
+                  {inventoryFilteredProducts.slice(0, inventoryLimit).map((p) => {
                     const isSelected = selectedProduct?.id === p.id;
                     return (
                       <tr 
                         key={p.id}
+                        data-product-row="true"
                         className={isSelected ? "selected-row" : ""}
                         onClick={() => setSelectedProduct(p)}
                         style={{ cursor: 'pointer' }}
@@ -1602,7 +1713,7 @@ function App() {
             </div>
 
             <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
-              Tổng số mặt hàng: {products.length}
+              Đã hiển thị: {Math.min(inventoryLimit, inventoryFilteredProducts.length)}/{inventoryFilteredProducts.length} mặt hàng (Tổng số mặt hàng: {products.length})
             </div>
           </div>
         )}
@@ -1683,20 +1794,49 @@ function App() {
               }}><span className="tool-icon">💵</span>Thu nợ</button>
 
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '4px' }}>
-                <span>Tìm kiếm:</span>
+                <span>Tìm kiếm (Esc):</span>
                 <input 
+                  ref={customerSearchRef}
                   className="classic-input" 
                   style={{ width: '150px' }} 
                   value={customerSearch} 
                   onChange={e => setCustomerSearch(e.target.value)} 
                   placeholder="Tên hoặc SĐT..."
                   onFocus={(e) => e.target.select()}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      const now = Date.now();
+                      if (now - lastCustomerEscPress.current < 500) {
+                        setCustomerSearch("");
+                      } else {
+                        e.currentTarget.focus();
+                        e.currentTarget.select();
+                      }
+                      lastCustomerEscPress.current = now;
+                      e.stopPropagation();
+                    }
+                  }}
                 />
               </div>
             </div>
 
             {/* Customer Data Grid */}
-            <div className="grid-container" style={{ margin: '4px', flex: 1, overflowY: 'auto' }}>
+            <div 
+              className="grid-container" 
+              style={{ margin: '4px', flex: 1, overflowY: 'auto' }}
+              onMouseDown={e => {
+                // Deselect if clicking the container background (not a row)
+                if ((e.target as HTMLElement).tagName === 'TD' || (e.target as HTMLElement).tagName === 'TR') return;
+                if ((e.target as HTMLElement).closest('tr[data-customer-row]')) return;
+                setSelectedCustomerIdx(null);
+              }}
+              onScroll={e => {
+                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                if (scrollHeight - scrollTop - clientHeight < 150) {
+                  setCustomerLimit(prev => Math.min(prev + 100, filteredCustomers.length));
+                }
+              }}
+            >
               <table className="data-grid">
                 <thead>
                   <tr>
@@ -1708,31 +1848,31 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.filter(c => {
-                    const query = removeAccents(customerSearch.toLowerCase());
-                    const nameNorm = removeAccents(c.name.toLowerCase());
-                    return nameNorm.includes(query) || c.phone.includes(query);
-                  }).map((c, idx) => (
-                    <tr 
-                      key={c.id} 
-                      className={selectedCustomerIdx === idx ? "selected-row" : ""}
-                      onClick={() => setSelectedCustomerIdx(idx)}
-                    >
-                      <td>KH-{c.id.padStart(4, '0')}</td>
-                      <td>{c.name}</td>
-                      <td>{c.phone}</td>
-                      <td>{c.address}</td>
-                      <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
-                        {formatVND(c.debt)}đ
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredCustomers.slice(0, customerLimit).map((c) => {
+                    const globalIdx = customers.findIndex(cust => cust.id === c.id);
+                    return (
+                      <tr 
+                        key={c.id} 
+                        data-customer-row="true"
+                        className={selectedCustomerIdx === globalIdx ? "selected-row" : ""}
+                        onClick={() => setSelectedCustomerIdx(globalIdx)}
+                      >
+                        <td>KH-{c.id.padStart(4, '0')}</td>
+                        <td>{c.name}</td>
+                        <td>{c.phone}</td>
+                        <td>{c.address}</td>
+                        <td className="text-right" style={{ color: c.debt > 0 ? 'var(--text-red)' : 'var(--text-blue)', fontWeight: c.debt > 0 ? 'bold' : 'normal' }}>
+                          {formatVND(c.debt)}đ
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             
             <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
-              Tổng số khách hàng: {customers.length}
+              Đã hiển thị: {Math.min(customerLimit, filteredCustomers.length)}/{filteredCustomers.length} khách hàng (Tổng số khách hàng: {customers.length})
             </div>
           </div>
         )}
