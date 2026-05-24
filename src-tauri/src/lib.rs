@@ -1138,9 +1138,28 @@ async fn print_bill_network(ip: String, payload: String) -> Result<String, Strin
     };
 
     let mut data = Vec::new();
-    data.extend_from_slice(b"\x1b@"); // Initialize printer
-    data.extend_from_slice(payload.as_bytes()); // Raw payload bytes
-    data.extend_from_slice(b"\n\n\n\n\x1bd\x02\x1dVB\x00"); // Feed 4 lines + cut
+    // ESC @ – Initialize printer (reset settings)
+    data.extend_from_slice(b"\x1b@");
+    // ESC t 0 – Select character code table: PC437 (pure ASCII/Latin)
+    // This ensures the printer uses an ASCII-compatible codepage
+    data.extend_from_slice(b"\x1bt\x00");
+
+    // Safety net: convert each Unicode char → ASCII byte.
+    // The frontend should already have transliterated Vietnamese to ASCII,
+    // but this ensures absolutely no multi-byte UTF-8 leaks through.
+    let safe_payload: Vec<u8> = payload
+        .chars()
+        .map(|c| {
+            if c.is_ascii() {
+                c as u8
+            } else {
+                b'?' // Fallback for any remaining non-ASCII character
+            }
+        })
+        .collect();
+    data.extend_from_slice(&safe_payload);
+    // Feed 4 lines + full paper cut (GS V B 0)
+    data.extend_from_slice(b"\n\n\n\n\x1bd\x04\x1dVB\x00");
 
     match stream.write_all(&data).await {
         Ok(_) => Ok(format!("Đã gửi lệnh in thành công tới {}!", addr_str)),

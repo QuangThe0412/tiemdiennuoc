@@ -84,3 +84,9 @@
 - **Problem 3: Only scanning port 9100** – Many cheap thermal printers (Xprinter, Gprinter) use 9100 by default, but some use 515 (LPD), 6101 (older Epson), or 8080. Always scan multiple common ports.
 - **Problem 4: Return format** – When multi-port scanning, return `"IP:port"` so the frontend can display which port was found AND pass the same `"IP:port"` string directly to `TcpStream::connect()`, which accepts both `"IP:port"` and parsed `SocketAddr`.
 - **Solution Pattern**: Scan ports `[9100, 515, 6101, 8080]` concurrently, return label as `"IP:port"`, let user click to select. On print, accept either `"IP"` (auto-append `:9100`) or `"IP:port"` directly.
+
+## Thermal Printer Encoding – Vietnamese Transliteration
+- **Problem 1: Regex-based transliteration is fragile** – Each `.replace(/à|á|.../)` call only matches NFC-precomposed forms. Characters stored as NFD (decomposed) in the source string won't match, causing garbled characters on receipt.
+- **Problem 2: `normalize("NFD").replace(diacritics)` order matters** – Running NFD normalize AFTER NFC-specific regex replacements means the already-replaced ASCII chars get re-processed, but the `\u0300-\u036f` range misses dot-below (`ọ` → `o + \u0323`) and hook-above which are outside that range.
+- **Solution 1 (JS)**: Use **lookup-map approach** — `str.normalize("NFC")` first, then `str.replace(/[^\x00-\x7F]/g, ch => MAP[ch] ?? '?')`. This handles all Unicode forms robustly with a single pass.
+- **Solution 2 (Rust)**: Add two layers of protection: (a) send `ESC t 0` (`\x1bt\x00`) to set printer to PC437 ASCII codepage, (b) convert payload char-by-char keeping only `c.is_ascii()` bytes, replacing others with `?`. This prevents any multi-byte UTF-8 sequences from reaching the printer.
