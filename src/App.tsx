@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Product, CartItem } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { removeAccents, formatVND, getFormattedDate, getFormattedTime, isRetailCustomer } from './utils';
+import { formatReceiptForNetworkPrinter, getLabelPreviewText, formatLabelForNetworkPrinter } from './printerServices';
 
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 
@@ -114,13 +116,6 @@ const tauriInvoke = async (cmd: string, args: any = {}): Promise<any> => {
   return null;
 };
 
-const removeAccents = (str: string): string => {
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'd');
-};
 interface Customer {
   id: string;
   name: string;
@@ -168,9 +163,7 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
 
   // Customer State
-  const [customers, setCustomers] = useState<Customer[]>([
-    { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 }
-  ]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerIdx, setSelectedCustomerIdx] = useState<number | null>(null);
 
@@ -239,10 +232,14 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [posSearch, setPosSearch] = useState("");
   const [invoiceNo, setInvoiceNo] = useState(() => "HĐ-" + Math.floor(10000 + Math.random() * 90000));
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer>(() => {
-    return { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer>({
+    id: '',
+    name: 'Chọn khách hàng...',
+    phone: '',
+    address: '',
+    debt: 0
   });
-  const [customerSearchQuery, setCustomerSearchQuery] = useState("Khách lẻ");
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [posNotes, setPosNotes] = useState("");
   const [selectedUnitFilter, setSelectedUnitFilter] = useState("");
@@ -297,18 +294,6 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const getFormattedDate = (date: Date) => {
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
-  };
-
-  const getFormattedTime = (date: Date) => {
-    const h = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return `${h}:${min}`;
-  };
 
   // Inventory State
   const [inventorySearch, setInventorySearch] = useState("");
@@ -511,10 +496,9 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, customConfirm, productToDelete, imageEditProduct]);
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
-    const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
     if (!serverVal || !userVal) {
       setProducts([]);
-      setCustomers([baseCustomer]);
+      setCustomers([]);
       return;
     }
     try {
@@ -539,19 +523,25 @@ function App() {
       }) as string;
       const parsedCusts = JSON.parse(rawCusts);
       if (Array.isArray(parsedCusts)) {
-        const hasKhachLe = parsedCusts.some(c => c.id === '1' || c.name === 'Khách lẻ');
-        if (hasKhachLe) {
-          setCustomers(parsedCusts);
-        } else {
-          setCustomers([baseCustomer, ...parsedCusts]);
+        setCustomers(parsedCusts);
+        if (parsedCusts.length > 0) {
+          setSelectedCustomer(prev => {
+            const exists = parsedCusts.find(c => c.id === prev.id);
+            if (exists) {
+              setCustomerSearchQuery(exists.name);
+              return exists;
+            }
+            setCustomerSearchQuery(parsedCusts[0].name);
+            return parsedCusts[0];
+          });
         }
       } else {
-        setCustomers([baseCustomer]);
+        setCustomers([]);
       }
     } catch (err) {
       console.warn("Could not connect to MSSQL, fallback to empty/default arrays:", err);
       setProducts([]);
-      setCustomers([baseCustomer]);
+      setCustomers([]);
     }
   };
 
@@ -615,211 +605,6 @@ function App() {
     refreshRef.current = handleRefresh;
   }, [handleRefresh]);
 
-  const removeVietnameseTones = (str: string): string => {
-    // Step 1: Normalize to NFC (precomposed) to ensure consistent characters
-    str = str.normalize("NFC");
-
-    // Step 2: Comprehensive Vietnamese → ASCII lookup map
-    const VI_MAP: Record<string, string> = {
-      // a
-      'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
-      'ă': 'a', 'ắ': 'a', 'ặ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a',
-      'ấ': 'a', 'ầ': 'a', 'ậ': 'a', 'ẩ': 'a', 'ẫ': 'a',
-      'ạ': 'a', 'ả': 'a',
-      // A
-      'À': 'A', 'Á': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A', 'Å': 'A',
-      'Ă': 'A', 'Ắ': 'A', 'Ặ': 'A', 'Ằ': 'A', 'Ẳ': 'A', 'Ẵ': 'A',
-      'Ấ': 'A', 'Ầ': 'A', 'Ậ': 'A', 'Ẩ': 'A', 'Ẫ': 'A',
-      'Ạ': 'A', 'Ả': 'A',
-      // e
-      'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
-      'ề': 'e', 'ế': 'e', 'ệ': 'e', 'ể': 'e', 'ễ': 'e',
-      'ẹ': 'e', 'ẻ': 'e', 'ẽ': 'e',
-      // E
-      'È': 'E', 'É': 'E', 'Ê': 'E', 'Ë': 'E',
-      'Ề': 'E', 'Ế': 'E', 'Ệ': 'E', 'Ể': 'E', 'Ễ': 'E',
-      'Ẹ': 'E', 'Ẻ': 'E', 'Ẽ': 'E',
-      // i
-      'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
-      'ị': 'i', 'ỉ': 'i', 'ĩ': 'i',
-      // I
-      'Ì': 'I', 'Í': 'I', 'Î': 'I', 'Ï': 'I',
-      'Ị': 'I', 'Ỉ': 'I', 'Ĩ': 'I',
-      // o
-      'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-      'ồ': 'o', 'ố': 'o', 'ộ': 'o', 'ổ': 'o', 'ỗ': 'o',
-      'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ợ': 'o', 'ở': 'o', 'ỡ': 'o',
-      'ọ': 'o', 'ỏ': 'o',
-      // O
-      'Ò': 'O', 'Ó': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
-      'Ồ': 'O', 'Ố': 'O', 'Ộ': 'O', 'Ổ': 'O', 'Ỗ': 'O',
-      'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ợ': 'O', 'Ở': 'O', 'Ỡ': 'O',
-      'Ọ': 'O', 'Ỏ': 'O',
-      // u
-      'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
-      'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ự': 'u', 'ử': 'u', 'ữ': 'u',
-      'ụ': 'u', 'ủ': 'u', 'ũ': 'u',
-      // U
-      'Ù': 'U', 'Ú': 'U', 'Û': 'U', 'Ü': 'U',
-      'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ự': 'U', 'Ử': 'U', 'Ữ': 'U',
-      'Ụ': 'U', 'Ủ': 'U', 'Ũ': 'U',
-      // y
-      'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
-      'Ỳ': 'Y', 'Ý': 'Y', 'Ỵ': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y',
-      // d/D
-      'đ': 'd', 'Đ': 'D',
-      // common Latin extras
-      'ñ': 'n', 'Ñ': 'N', 'ç': 'c', 'Ç': 'C',
-    };
-
-    // Step 3: Replace each non-ASCII character via map; unknown chars → '?'
-    str = str.replace(/[^\x00-\x7F]/g, (ch) => VI_MAP[ch] ?? '?');
-
-    return str;
-  };
-
-  const formatReceiptForNetworkPrinter = (
-    sName: string,
-    sAddress: string,
-    sPhone: string,
-    isReprint: boolean,
-    invoiceNo: string,
-    dateTimeStr: string,
-    customerName: string,
-    customerPhone: string,
-    notes: string,
-    items: Array<{ productName: string; quantity: number; price: number; total: number }>,
-    baseTotal: number,
-    discountTotal: number,
-    invoiceDiscountPercent: number,
-    finalTotal: number
-  ): string => {
-    const cleanShopName = removeVietnameseTones(sName).toUpperCase();
-    const cleanAddress = removeVietnameseTones(sAddress);
-    const cleanPhone = removeVietnameseTones(sPhone);
-    const title = isReprint ? "PHIEU IN LAI" : "PHIEU THANH TOAN";
-    const cleanCustomerName = removeVietnameseTones(customerName);
-    const cleanNotes = removeVietnameseTones(notes);
-
-    const centerText = (text: string) => {
-      const spaces = Math.max(0, Math.floor((40 - text.length) / 2));
-      return " ".repeat(spaces) + text;
-    };
-
-    const lineSeparator = "-".repeat(40);
-    const doubleLineSeparator = "=".repeat(40);
-
-    let p = "";
-    p += centerText(cleanShopName) + "\n";
-    p += centerText("DC: " + cleanAddress) + "\n";
-    p += centerText("SDT: " + cleanPhone) + "\n";
-    p += lineSeparator + "\n";
-    p += centerText(title) + "\n";
-    p += `So phieu: ${invoiceNo}\n`;
-    p += `Thoi gian: ${dateTimeStr}\n`;
-    p += `Khach hang: ${cleanCustomerName}${customerPhone ? ` (${customerPhone})` : ""}\n`;
-    if (cleanNotes) {
-      p += `Ghi chu: ${cleanNotes}\n`;
-    }
-    p += lineSeparator + "\n";
-
-    // Columns: Ten hang (16), SL (4), D.Gia (9), T.Tien (11) = 40
-    p += "Ten hang".padEnd(16) + "SL".padStart(4) + "D.Gia".padStart(9) + "T.Tien".padStart(11) + "\n";
-    p += lineSeparator + "\n";
-
-    items.forEach(item => {
-      const cleanName = removeVietnameseTones(item.productName);
-      const sl = item.quantity.toString();
-      const dg = item.price.toLocaleString("vi-VN");
-      const tt = item.total.toLocaleString("vi-VN");
-
-      if (cleanName.length > 15) {
-        p += cleanName + "\n";
-        p += "".padEnd(16) + sl.padStart(4) + dg.padStart(9) + tt.padStart(11) + "\n";
-      } else {
-        p += cleanName.padEnd(16) + sl.padStart(4) + dg.padStart(9) + tt.padStart(11) + "\n";
-      }
-    });
-
-    p += lineSeparator + "\n";
-
-    const formatTotalRow = (label: string, value: string) => {
-      const dotsCount = 40 - label.length - value.length;
-      const dots = dotsCount > 0 ? ".".repeat(dotsCount) : " ";
-      return label + dots + value;
-    };
-
-    p += formatTotalRow("Cong tien hang", baseTotal.toLocaleString("vi-VN") + "d") + "\n";
-    if (discountTotal > 0) {
-      p += formatTotalRow("Giam gia", "-" + discountTotal.toLocaleString("vi-VN") + "d") + "\n";
-    }
-    if (invoiceDiscountPercent > 0) {
-      p += formatTotalRow("Chiet khau HD", invoiceDiscountPercent + "%") + "\n";
-    }
-    p += doubleLineSeparator + "\n";
-    p += formatTotalRow("TONG CONG", finalTotal.toLocaleString("vi-VN") + "d") + "\n";
-    p += doubleLineSeparator + "\n";
-
-    p += "\n";
-    p += centerText("Cam on Quy khach. Hen gap lai!") + "\n";
-    p += "\n\n";
-
-    return p;
-  };
-
-  const getLabelPreviewText = (productName: string, price: number, sku?: string): string => {
-    const cleanName = removeVietnameseTones(productName).toUpperCase();
-    const cleanShop = removeVietnameseTones(shopName).toUpperCase();
-    const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
-    const priceStr = price.toLocaleString("vi-VN") + " VND";
-
-    const pad = (s: string, len: number) => {
-      if (s.length >= len) return s.substring(0, len);
-      return s + " ".repeat(len - s.length);
-    };
-
-    const w = 24; // width of one label in chars
-    const gap = "  |  ";
-
-    let p = "";
-    p += pad(cleanShop, w) + gap + pad(cleanShop, w) + "\n";
-    p += pad(cleanName, w) + gap + pad(cleanName, w) + "\n";
-    p += pad("||||||||||||||||||||||", w) + gap + pad("||||||||||||||||||||||", w) + "\n";
-    p += pad("       " + safeSku, w) + gap + pad("       " + safeSku, w) + "\n";
-    p += pad(priceStr, w) + gap + pad(priceStr, w) + "\n";
-    return p;
-  };
-
-  const formatLabelForNetworkPrinter = (productName: string, price: number, sku?: string, quantity: number = 1): Uint8Array => {
-    const cleanName = removeVietnameseTones(productName).toUpperCase();
-    const cleanShop = removeVietnameseTones(shopName).toUpperCase();
-    const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
-    const priceStr = price.toLocaleString("vi-VN") + " VND";
-
-    let tspl = "";
-    tspl += "SIZE 72 mm, 22 mm\r\n"; // Full width of a 2-column 35x22 roll (35 + 2 gap + 35)
-    tspl += "GAP 2 mm, 0 mm\r\n";
-    tspl += "DIRECTION 1\r\n";
-    tspl += "CLS\r\n";
-
-    // Label 1 (Left column, starting X = 16 dots / 2mm margin)
-    tspl += `TEXT 16,10,"2",0,1,1,"${cleanShop}"\r\n`;
-    tspl += `TEXT 16,40,"2",0,1,1,"${cleanName}"\r\n`;
-    tspl += `BARCODE 16,70,"128",40,1,0,2,2,"${safeSku}"\r\n`;
-    tspl += `TEXT 16,140,"2",0,1,1,"${priceStr}"\r\n`;
-
-    // Label 2 (Right column, starting X = 16 + 280 (35mm) + 16 (2mm gap) = 312 dots)
-    tspl += `TEXT 312,10,"2",0,1,1,"${cleanShop}"\r\n`;
-    tspl += `TEXT 312,40,"2",0,1,1,"${cleanName}"\r\n`;
-    tspl += `BARCODE 312,70,"128",40,1,0,2,2,"${safeSku}"\r\n`;
-    tspl += `TEXT 312,140,"2",0,1,1,"${priceStr}"\r\n`;
-
-    const pages = Math.max(1, Math.ceil(quantity / 2));
-    tspl += `PRINT ${pages},1\r\n`;
-
-    return new TextEncoder().encode(tspl);
-  };
-
   const printViaNetwork = async (
     invoiceNo: string,
     dateTimeStr: string,
@@ -867,7 +652,7 @@ function App() {
       return;
     }
     try {
-      const payload = formatLabelForNetworkPrinter(productName, price, sku, quantity);
+      const payload = formatLabelForNetworkPrinter(productName, price, shopName, sku, quantity);
       const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(payload) });
       console.log("Kết quả in tem mạng:", res);
       alert(`Đã gửi lệnh in ${quantity} tem thành công!`);
@@ -1115,7 +900,7 @@ function App() {
       return;
     }
     try {
-      const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000, "TEST1234", 2);
+      const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000, shopName, "TEST1234", 2);
       const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(testPayload) });
       alert("Lệnh in tem thử đã được gửi: " + res);
     } catch (err: any) {
@@ -2059,8 +1844,9 @@ function App() {
     // Reset POS
     setCart([]);
     setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
-    setSelectedCustomer(customers[0]);
-    setCustomerSearchQuery(customers[0].name);
+    const defaultCust = customers[0] || { id: '', name: 'Chọn khách hàng...', phone: '', address: '', debt: 0 };
+    setSelectedCustomer(defaultCust);
+    setCustomerSearchQuery(customers[0] ? customers[0].name : "");
     setPosNotes("");
     setSelectedCartIndex(null);
   };
@@ -2082,7 +1868,7 @@ function App() {
           user: mssqlUser,
           pass: mssqlPass,
           invoiceNo,
-          customerId: Number(selectedCustomer.id) || 1,
+          customerId: selectedCustomer.id || "1",
           discountPct: 0.0,
           discountVal: getCartDiscountTotal(),
           notes: posNotes,
@@ -2100,8 +1886,8 @@ function App() {
       alert("Không có sản phẩm nào trong giỏ hàng để ghi nợ!");
       return;
     }
-    if (selectedCustomer.id === '1') {
-      alert("Không thể ghi nợ cho Khách lẻ. Vui lòng chọn khách hàng cụ thể hoặc thêm khách hàng mới!");
+    if (!selectedCustomer.id || isRetailCustomer(selectedCustomer.name)) {
+      alert("Không thể ghi nợ cho Khách lẻ hoặc chưa chọn khách hàng. Vui lòng chọn khách hàng cụ thể hoặc thêm khách hàng mới!");
       return;
     }
 
@@ -2152,8 +1938,9 @@ function App() {
   const resetPOSAfterSale = () => {
     setCart([]);
     setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
-    setSelectedCustomer(customers[0]);
-    setCustomerSearchQuery(customers[0].name);
+    const defaultCust = customers[0] || { id: '', name: 'Chọn khách hàng...', phone: '', address: '', debt: 0 };
+    setSelectedCustomer(defaultCust);
+    setCustomerSearchQuery(customers[0] ? customers[0].name : "");
     setPosNotes("");
     setSelectedCartIndex(null);
     setIsCheckoutModalOpen(false);
@@ -2187,9 +1974,6 @@ function App() {
     setCart(newCart);
   };
 
-  const formatVND = (amount: number) => {
-    return amount.toLocaleString("vi-VN");
-  };
 
   return (
     <div ref={appContainerRef} className="app-container">
@@ -3015,8 +2799,8 @@ function App() {
                   return;
                 }
                 const cust = customers[selectedCustomerIdx];
-                if (cust.id === '1') {
-                  alert("Khách lẻ mặc định không thể ghi nợ!");
+                if (isRetailCustomer(cust.name)) {
+                  alert("Khách lẻ không thể ghi nợ!");
                   return;
                 }
                 setAddDebtAmount(0);
@@ -3029,8 +2813,8 @@ function App() {
                   return;
                 }
                 const cust = customers[selectedCustomerIdx];
-                if (cust.id === '1') {
-                  alert("Khách lẻ mặc định không có công nợ cần thu!");
+                if (isRetailCustomer(cust.name)) {
+                  alert("Khách lẻ không có công nợ cần thu!");
                   return;
                 }
                 if (cust.debt <= 0) {
@@ -3099,7 +2883,7 @@ function App() {
                 <tbody>
                   {filteredCustomers.slice(0, customerLimit).map((c) => {
                     const globalIdx = customers.findIndex(cust => cust.id === c.id);
-                    const isSelected = selectedCustomerIdx === globalIdx && c.id !== '1';
+                    const isSelected = selectedCustomerIdx === globalIdx && !isRetailCustomer(c.name);
                     return (
                       <tr
                         key={c.id}
@@ -3161,7 +2945,7 @@ function App() {
                             style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             onClick={async (e) => {
                               e.stopPropagation();
-                              if (c.id === '1') {
+                              if (isRetailCustomer(c.name)) {
                                 alert("Không thể xóa Khách lẻ mặc định!");
                                 return;
                               }
@@ -3173,7 +2957,7 @@ function App() {
                                       dbName: mssqlDbName,
                                       user: mssqlUser,
                                       pass: mssqlPass,
-                                      id: Number(c.id) || 0
+                                      id: c.id
                                     });
                                   } catch (err: any) {
                                     alert("Lỗi khi xóa khách hàng từ CSDL: " + err.toString());
@@ -3982,7 +3766,7 @@ function App() {
                   minHeight: '80px',
                   boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
                 }}>
-                  {getLabelPreviewText(labelPrintProduct.name, labelPrintProduct.price, labelPrintProduct.sku).trim()}
+                  {getLabelPreviewText(labelPrintProduct.name, labelPrintProduct.price, shopName, labelPrintProduct.sku).trim()}
                 </div>
               </div>
 
@@ -4191,7 +3975,7 @@ function App() {
                     alert(`Đã thêm khách hàng "${customerForm.name}" thành công.`);
                   }
                   setIsCustomerModalOpen(false);
-                }}>Ghi lại</button>
+                }}>Lưu</button>
                 <button className="classic-btn" onClick={() => setIsCustomerModalOpen(false)}>Hủy bỏ</button>
               </div>
             </div>

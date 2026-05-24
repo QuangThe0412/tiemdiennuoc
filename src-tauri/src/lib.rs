@@ -405,7 +405,7 @@ async fn fetch_customers_db(server: String, db_name: String, user: String, pass:
     
     let stream = client.simple_query("
         SELECT 
-            k.IDKhachHang, 
+            CAST(k.IDKhachHang AS VARCHAR(50)) as IDKhachHang, 
             k.MaKhachHang, 
             k.TenKhachHang, 
             k.DiaChiKH, 
@@ -424,7 +424,7 @@ async fn fetch_customers_db(server: String, db_name: String, user: String, pass:
     
     let mut customers_json = Vec::new();
     for row in rows {
-        let id: i32 = row.get("IDKhachHang").unwrap_or(0);
+        let id: &str = row.get("IDKhachHang").unwrap_or("0");
         let name: &str = row.get("TenKhachHang").unwrap_or("");
         let address: &str = row.get("DiaChiKH").unwrap_or("");
         let phone: &str = row.get("DienThoai").unwrap_or("");
@@ -541,7 +541,7 @@ async fn delete_customer_db(
     db_name: String, 
     user: String, 
     pass: String,
-    id: i32
+    id: String
 ) -> Result<String, String> {
     let config = get_mssql_config(&server, &db_name, &user, &pass);
     
@@ -549,8 +549,8 @@ async fn delete_customer_db(
     tcp.set_nodelay(true).map_err(|e| e.to_string())?;
     let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
     
-    client.execute("DELETE FROM CongNoKH WHERE IDKhachHang = @P1", &[&id]).await.map_err(|e| e.to_string())?;
-    client.execute("DELETE FROM KhachHang WHERE IDKhachHang = @P1", &[&id]).await.map_err(|e| e.to_string())?;
+    client.execute("DELETE FROM CongNoKH WHERE CAST(IDKhachHang AS VARCHAR(50)) = @P1", &[&id]).await.map_err(|e| e.to_string())?;
+    client.execute("DELETE FROM KhachHang WHERE CAST(IDKhachHang AS VARCHAR(50)) = @P1", &[&id]).await.map_err(|e| e.to_string())?;
     
     Ok("Xóa khách hàng thành công!".to_string())
 }
@@ -619,7 +619,7 @@ async fn fetch_invoices_db(
             CAST(h.PTKhuyenMai AS FLOAT) as PTKhuyenMai,
             CAST(h.TienKhuyenMai AS FLOAT) as TienKhuyenMai,
             h.GhiChu,
-            h.IDKhachHang,
+            CAST(h.IDKhachHang AS VARCHAR(50)) as IDKhachHang,
             k.TenKhachHang,
             k.DienThoai as DienThoaiKH,
             CAST(ISNULL((
@@ -647,7 +647,7 @@ async fn fetch_invoices_db(
         let pt_km: f64 = row.get("PTKhuyenMai").unwrap_or(0.0);
         let tien_km: f64 = row.get("TienKhuyenMai").unwrap_or(0.0);
         let note: &str = row.get("GhiChu").unwrap_or("");
-        let customer_id: i32 = row.get("IDKhachHang").unwrap_or(0);
+        let customer_id: &str = row.get("IDKhachHang").unwrap_or("0");
         let customer_name: &str = row.get("TenKhachHang").unwrap_or("Khách lẻ");
         let customer_phone: &str = row.get("DienThoaiKH").unwrap_or("");
         let total: f64 = row.get("TongTien").unwrap_or(0.0);
@@ -660,7 +660,7 @@ async fn fetch_invoices_db(
             "PTKhuyenMai": pt_km,
             "TienKhuyenMai": tien_km,
             "GhiChu": note,
-            "IDKhachHang": customer_id,
+            "IDKhachHang": customer_id.to_string(),
             "TenKhachHang": customer_name,
             "DienThoaiKH": customer_phone,
             "TongTien": total
@@ -734,7 +734,7 @@ async fn save_invoice_db(
     user: String,
     pass: String,
     invoice_no: String,
-    customer_id: i32,
+    customer_id: String,
     discount_pct: f64,
     discount_val: f64,
     notes: String,
@@ -763,11 +763,11 @@ async fn save_invoice_db(
     }
 
     // Validate customer_id exists in KhachHang; if not, fall back to first available
-    let mut resolved_customer_id = customer_id;
+    let mut resolved_customer_id = customer_id.clone();
     let mut kh_count: i32 = 0;
     {
         if let Ok(stream) = client.query(
-            "SELECT COUNT(1) as cnt FROM KhachHang WHERE IDKhachHang = @P1",
+            "SELECT COUNT(1) as cnt FROM KhachHang WHERE CAST(IDKhachHang AS VARCHAR(50)) = @P1",
             &[&customer_id]
         ).await {
             if let Ok(Some(row)) = stream.into_row().await {
@@ -777,12 +777,12 @@ async fn save_invoice_db(
     }
     if kh_count == 0 {
         if let Ok(fallback_stream) = client.query(
-            "SELECT TOP 1 IDKhachHang FROM KhachHang ORDER BY IDKhachHang ASC",
+            "SELECT TOP 1 CAST(IDKhachHang AS VARCHAR(50)) AS IDKhachHang FROM KhachHang ORDER BY IDKhachHang ASC",
             &[]
         ).await {
             if let Ok(Some(fallback_row)) = fallback_stream.into_row().await {
-                if let Some(fid) = fallback_row.get("IDKhachHang") {
-                    resolved_customer_id = fid;
+                if let Some(fid) = fallback_row.get::<&str, _>("IDKhachHang") {
+                    resolved_customer_id = fid.to_string();
                 }
             }
         }
