@@ -189,8 +189,8 @@ function App() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isUnitManagerOpen, setIsUnitManagerOpen] = useState(false);
 
-  // Custom Alert state
   const [customAlert, setCustomAlert] = useState<{ message: string; title: string; type: 'info' | 'warning' | 'error' } | null>(null);
+  const [customConfirm, setCustomConfirm] = useState<{ message: string; title: string; onConfirm: () => void } | null>(null);
   
   const showAlert = useCallback((message: string, title?: string, type?: 'info' | 'warning' | 'error') => {
     let resolvedTitle = title || "";
@@ -243,6 +243,7 @@ function App() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [imageEditProduct, setImageEditProduct] = useState<Product | null>(null);
   const [imageEditLink, setImageEditLink] = useState("");
+  const [sessionUploadedImages, setSessionUploadedImages] = useState<string[]>([]);
   const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; price2: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -259,10 +260,8 @@ function App() {
   const [shopPhone, setShopPhone] = useState("0908 123 456");
   const [gasUrl, setGasUrl] = useState("");
   const [gasToken, setGasToken] = useState("tiem_dien_nuoc_secret_key_2026");
-  const [isPollingActive, setIsPollingActive] = useState(false);
-  const [pollingSessionId, setPollingSessionId] = useState("");
-  const pollingIntervalRef = useRef<any>(null);
-  const isPollingRef = useRef(false);
+
+  const [iphoneSessionId, setIphoneSessionId] = useState("");
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -394,6 +393,10 @@ function App() {
           setCustomAlert(null);
           return;
         }
+        if (customConfirm) {
+          setCustomConfirm(null);
+          return;
+        }
         if (productToDelete) {
           setProductToDelete(null);
           return;
@@ -482,7 +485,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, productToDelete, imageEditProduct]);
+  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, customConfirm, productToDelete, imageEditProduct]);
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
     const baseCustomer = { id: '1', name: 'Khách lẻ', phone: '', address: '', debt: 0 };
     if (!serverVal || !userVal) {
@@ -706,6 +709,7 @@ function App() {
         const sShopPhone = settings.shopPhone || "0908 123 456";
         const sGasUrl = settings.gasUrl || "";
         const sGasToken = settings.gasToken || "tiem_dien_nuoc_secret_key_2026";
+        const sIphoneSessionId = settings.iphoneSessionId || `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
@@ -716,6 +720,7 @@ function App() {
         setShopPhone(sShopPhone);
         setGasUrl(sGasUrl);
         setGasToken(sGasToken);
+        setIphoneSessionId(sIphoneSessionId);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -757,7 +762,8 @@ function App() {
         shopAddress,
         shopPhone,
         gasUrl,
-        gasToken
+        gasToken,
+        iphoneSessionId
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
@@ -793,6 +799,50 @@ function App() {
       await tauriInvoke("open_config_folder");
     } catch (err: any) {
       alert("Không thể mở thư mục cấu hình: " + err.toString());
+    }
+  };
+
+  const handleBackupDatabase = async () => {
+    if (!mssqlServer || !mssqlDbName || !mssqlUser) {
+      alert("Vui lòng cấu hình đầy đủ thông tin kết nối CSDL trước khi backup!");
+      return;
+    }
+
+    setCustomConfirm({
+      title: "Xác nhận sao lưu",
+      message: `Bạn có chắc chắn muốn sao lưu cơ sở dữ liệu "${mssqlDbName}"?\nTên file sao lưu sẽ có dạng yyyyMMdd_${mssqlDbName}.bak và được lưu ở thư mục chứa setting.json.`,
+      onConfirm: async () => {
+        try {
+          const res = await tauriInvoke("backup_database", {
+            server: mssqlServer,
+            dbName: mssqlDbName,
+            user: mssqlUser,
+            pass: mssqlPass
+          });
+          alert(res);
+        } catch (err: any) {
+          alert("Lỗi sao lưu database: " + err.toString());
+        }
+      }
+    });
+  };
+
+  const handleFixInit = async () => {
+    if (!mssqlServer || !mssqlDbName || !mssqlUser) {
+      alert("Vui lòng cấu hình đầy đủ thông tin kết nối CSDL trước khi fix init!");
+      return;
+    }
+    try {
+      const res = await tauriInvoke("fix_init_db", {
+        server: mssqlServer,
+        dbName: mssqlDbName,
+        user: mssqlUser,
+        pass: mssqlPass
+      });
+      alert(res);
+      await loadDataFromMSSQL(mssqlServer, mssqlDbName, mssqlUser, mssqlPass);
+    } catch (err: any) {
+      alert("Lỗi sửa cấu trúc CSDL (Fix Init): " + err.toString());
     }
   };
 
@@ -1384,12 +1434,48 @@ function App() {
         return;
       }
     }
+    if (p.link) {
+      deleteGoogleDriveImage(p.link);
+    }
     setProducts(prev => prev.filter(item => item.id !== p.id));
     if (selectedProduct?.id === p.id) {
       setSelectedProduct(null);
     }
     showAlert(`Đã xóa mặt hàng "${p.name}" thành công.`, "Thành công", "info");
     setProductToDelete(null);
+  };
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const target = e.currentTarget;
+    if (target.src.includes("lh3.googleusercontent.com/d/")) {
+      const parts = target.src.split("/d/");
+      const fileId = parts[parts.length - 1];
+      target.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    } else if (target.src.includes("drive.google.com/uc?export=view")) {
+      try {
+        const urlParams = new URLSearchParams(new URL(target.src).search);
+        const fileId = urlParams.get("id");
+        if (fileId) {
+          target.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+        }
+      } catch (err) {
+        console.error("Lỗi parse URL trong handleImageError:", err);
+      }
+    }
+  };
+
+  const deleteGoogleDriveImage = async (imageUrl: string) => {
+    if (!imageUrl || !gasUrl || !gasToken) return;
+    const isGoogleDriveLink = imageUrl.includes("googleusercontent.com") || imageUrl.includes("drive.google.com");
+    if (!isGoogleDriveLink) return;
+
+    try {
+      const deleteUrl = `${gasUrl}?action=delete&token=${gasToken}&url=${encodeURIComponent(imageUrl)}`;
+      const resStr: string = await tauriInvoke("delete_drive_image_rust", { deleteUrl });
+      console.log("Kết quả xóa ảnh trên Drive từ Rust:", resStr);
+    } catch (err) {
+      console.error("Lỗi khi gửi yêu cầu xóa ảnh trên Drive qua Rust:", err);
+    }
   };
 
   const handleSaveProductImage = async () => {
@@ -1423,6 +1509,18 @@ function App() {
       }
     }
 
+    if (p.link && imageEditLink !== p.link) {
+      deleteGoogleDriveImage(p.link);
+    }
+
+    // Delete any other discarded session images (that weren't saved)
+    sessionUploadedImages.forEach(url => {
+      if (url !== imageEditLink) {
+        deleteGoogleDriveImage(url);
+      }
+    });
+    setSessionUploadedImages([]);
+
     setProducts(prev => prev.map(item => item.id === p.id ? updatedProduct : item));
     if (selectedProduct?.id === p.id) {
       setSelectedProduct(updatedProduct);
@@ -1438,77 +1536,79 @@ function App() {
     }));
     showAlert(`Đã cập nhật hình ảnh cho mặt hàng "${p.name}" thành công.`, "Thành công", "info");
     setImageEditProduct(null);
-    isPollingRef.current = false;
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-    setIsPollingActive(false);
-  };
-
-  const startIPhoneCapture = () => {
-    if (!gasUrl) {
-      alert("Vui lòng cấu hình Google Script URL trong mục Cấu hình hệ thống trước!");
-      return;
-    }
-    const sessionId = "sess_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-    setPollingSessionId(sessionId);
-    isPollingRef.current = true;
-    setIsPollingActive(true);
-
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
-
-    pollingIntervalRef.current = setInterval(async () => {
-      if (!isPollingRef.current) {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        return;
-      }
-      try {
-        const checkUrl = `${gasUrl}?action=check&session=${sessionId}&token=${gasToken}`;
-        const res = await fetch(checkUrl);
-        const data = await res.json();
-        
-        if (!isPollingRef.current) return;
-
-        if (data.status === "success" && data.imageUrl) {
-          setImageEditLink(data.imageUrl);
-          isPollingRef.current = false;
-          setIsPollingActive(false);
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
-          alert("Nhận ảnh từ điện thoại thành công!");
-        }
-      } catch (err) {
-        console.error("Lỗi khi kết nối tới Google Apps Script:", err);
-      }
-    }, 2000);
-  };
-
-  const stopIPhoneCapture = () => {
-    isPollingRef.current = false;
-    setIsPollingActive(false);
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
   };
 
   const closeImageEditModal = () => {
+    // Delete any session-uploaded images from Google Drive on cancel
+    sessionUploadedImages.forEach(url => {
+      if (url !== imageEditProduct?.link) {
+        deleteGoogleDriveImage(url);
+      }
+    });
+    setSessionUploadedImages([]);
     setImageEditProduct(null);
-    isPollingRef.current = false;
-    setIsPollingActive(false);
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
   };
+
+  // Hook xử lý Đồng bộ Camera iPhone khi mở modal sửa ảnh
+  const batchPollingIntervalRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!imageEditProduct) {
+      if (batchPollingIntervalRef.current) {
+        clearInterval(batchPollingIntervalRef.current);
+        batchPollingIntervalRef.current = null;
+      }
+      if (gasUrl) {
+        fetch(`${gasUrl}?action=set_active&session=${iphoneSessionId}&token=${gasToken}&sku=&name=`)
+          .catch(err => console.error("Lỗi xóa active product:", err));
+      }
+      return;
+    }
+
+    if (!gasUrl) return;
+
+    fetch(`${gasUrl}?action=set_active&session=${iphoneSessionId}&token=${gasToken}&sku=${encodeURIComponent(imageEditProduct.sku)}&name=${encodeURIComponent(imageEditProduct.name)}`)
+      .catch(err => console.error("Lỗi set active product:", err));
+
+    if (batchPollingIntervalRef.current) {
+      clearInterval(batchPollingIntervalRef.current);
+    }
+
+    const targetSku = imageEditProduct.sku;
+    const targetProduct = imageEditProduct;
+
+    batchPollingIntervalRef.current = setInterval(async () => {
+      try {
+        const checkUrl = `${gasUrl}?action=check&session=${iphoneSessionId}&token=${gasToken}&sku=${encodeURIComponent(targetSku)}`;
+        const res = await fetch(checkUrl);
+        const data = await res.json();
+        
+        if (data.status === "success" && data.imageUrl) {
+          // Update the preview link
+          setImageEditLink(prevLink => {
+            // If we have an unsaved image from this session, delete it from Google Drive to avoid clutter
+            if (prevLink && prevLink !== targetProduct.link) {
+              deleteGoogleDriveImage(prevLink);
+            }
+            return data.imageUrl;
+          });
+
+          // Add the new imageUrl to the sessionUploadedImages list
+          setSessionUploadedImages(prev => [...prev, data.imageUrl]);
+
+          showAlert(`Đã nhận hình ảnh mới từ iPhone cho mặt hàng "${targetProduct.name}"! Nhấn "Lưu" để hoàn tất.`, "Đồng bộ ảnh", "info");
+        }
+      } catch (err) {
+        console.error("Lỗi polling đồng bộ camera:", err);
+      }
+    }, 2000);
+
+    return () => {
+      if (batchPollingIntervalRef.current) {
+        clearInterval(batchPollingIntervalRef.current);
+      }
+    };
+  }, [imageEditProduct?.id, gasUrl, gasToken, iphoneSessionId]);
 
   const handleSaveTemporary = () => {
     if (cart.length === 0) {
@@ -2050,7 +2150,7 @@ function App() {
                 <div className="pos-image-panel" style={{ margin: 0, minWidth: '200px', height: '100%', flexDirection: 'column' }}>
                   <div style={{ flex: 1, width: '100%', overflow: 'hidden', padding: '4px' }}>
                     {selectedProduct?.link ? (
-                      <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />
                     ) : (
                       <div className="default-image-placeholder">
                         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -2099,6 +2199,7 @@ function App() {
               <button className="tool-btn" onClick={() => setIsUnitManagerOpen(true)}>
                 <span className="tool-icon">📁</span>Đơn Vị Tính
               </button>
+
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Trạng thái:</span>
                 <select 
@@ -2159,23 +2260,23 @@ function App() {
               </button>
             </div>
 
-            {/* Main Inventory Grid */}
-            <div 
-              className="grid-container" 
-              style={{ margin: '4px' }}
-              onMouseDown={e => {
-                // Deselect if clicking the container background (not a row)
-                if ((e.target as HTMLElement).tagName === 'TD' || (e.target as HTMLElement).tagName === 'TR') return;
-                if ((e.target as HTMLElement).closest('tr[data-product-row]')) return;
-                setSelectedProduct(null);
-              }}
-              onScroll={e => {
-                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-                if (scrollHeight - scrollTop - clientHeight < 150) {
-                  setInventoryLimit(prev => Math.min(prev + 100, inventoryFilteredProducts.length));
-                }
-              }}
-            >
+            {/* Main Inventory Layout with optional Batch Capture Sidebar */}
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden', margin: '4px' }}>
+              <div 
+                className="grid-container" 
+                style={{ flex: 1, margin: 0 }}
+                onMouseDown={e => {
+                  if ((e.target as HTMLElement).tagName === 'TD' || (e.target as HTMLElement).tagName === 'TR') return;
+                  if ((e.target as HTMLElement).closest('tr[data-product-row]')) return;
+                  setSelectedProduct(null);
+                }}
+                onScroll={e => {
+                  const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                  if (scrollHeight - scrollTop - clientHeight < 150) {
+                    setInventoryLimit(prev => Math.min(prev + 100, inventoryFilteredProducts.length));
+                  }
+                }}
+              >
               <table className="data-grid">
                 <thead>
                   <tr>
@@ -2219,7 +2320,7 @@ function App() {
                               title="Click để sửa hình ảnh"
                             >
                               {p.link ? (
-                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #0056b3' }} />
+                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #0056b3' }} onError={handleImageError} />
                               ) : (
                                 <span style={{ color: '#0056b3', fontSize: '10px', textDecoration: 'underline' }}>[Sửa ảnh]</span>
                               )}
@@ -2314,7 +2415,7 @@ function App() {
                               title="Click để sửa hình ảnh"
                             >
                               {p.link ? (
-                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} />
+                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} onError={handleImageError} />
                               ) : (
                                 <span style={{ color: '#808080', fontSize: '10px' }}>[Không ảnh]</span>
                               )}
@@ -2379,11 +2480,14 @@ function App() {
               </table>
             </div>
 
-            <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
-              Đã hiển thị: {Math.min(inventoryLimit, inventoryFilteredProducts.length)}/{inventoryFilteredProducts.length} mặt hàng (Tổng số mặt hàng: {products.length})
-            </div>
+
           </div>
-        )}
+
+          <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
+            Đã hiển thị: {Math.min(inventoryLimit, inventoryFilteredProducts.length)}/{inventoryFilteredProducts.length} mặt hàng (Tổng số mặt hàng: {products.length})
+          </div>
+        </div>
+      )}
 
         {activeTab === "customers" && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2980,6 +3084,21 @@ function App() {
                     placeholder="Mã bí mật xác thực kết nối điện thoại"
                   />
                 </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Mã kết nối:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1, backgroundColor: '#f0f0f0' }} 
+                    value={iphoneSessionId} 
+                    readOnly
+                  />
+                  <button className="classic-btn" style={{ minWidth: '60px', height: '22px' }} onClick={() => {
+                    const newSess = `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                    setIphoneSessionId(newSess);
+                  }} title="Tạo mã kết nối mới cho iPhone">
+                    Tạo mới
+                  </button>
+                </div>
               </fieldset>
 
               {/* Kết nối MSSQL Database */}
@@ -3053,7 +3172,7 @@ function App() {
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
                   <button 
                     className="classic-btn"
                     style={{ minWidth: '120px' }}
@@ -3063,13 +3182,31 @@ function App() {
                     {testingConnection ? "Đang kết nối..." : "🔌 Kiểm tra kết nối"}
                   </button>
 
+                  <button 
+                    className="classic-btn"
+                    style={{ minWidth: '90px', backgroundColor: '#e6f3ff', borderColor: '#b3d7ff' }}
+                    onClick={handleBackupDatabase}
+                    title="Sao lưu database hiện tại"
+                  >
+                    💾 Backup DB
+                  </button>
+
+                  <button 
+                    className="classic-btn"
+                    style={{ minWidth: '90px', backgroundColor: '#fff0f5', borderColor: '#ffc0cb' }}
+                    onClick={handleFixInit}
+                    title="Kiểm tra và sửa cấu trúc bảng AnhMon (thêm cột URL)"
+                  >
+                    🛠️ Fix Init
+                  </button>
+
                   {mssqlTestResult && (
                     <span style={{ 
                       fontSize: '11px', 
                       fontWeight: 'bold', 
                       color: mssqlTestResult.success ? '#006400' : '#8b0000',
                       wordBreak: 'break-word',
-                      flex: 1
+                      flex: '1 1 100%'
                     }}>
                       {mssqlTestResult.msg}
                     </span>
@@ -3649,6 +3786,51 @@ function App() {
         </div>
       )}
 
+      {customConfirm && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="classic-dialog" style={{ width: '320px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
+            <div 
+              className="dialog-title-bar" 
+              style={{
+                background: 'linear-gradient(90deg, #008080, #20b2aa)',
+                color: '#fff'
+              }}
+            >
+              <span className="dialog-title">{customConfirm.title}</span>
+              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setCustomConfirm(null)}>✕</button>
+            </div>
+            <div className="dialog-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ fontSize: '24px' }}>❓</span>
+                <div style={{ fontSize: '12px', whiteSpace: 'pre-line', lineHeight: '1.4', color: '#000', flex: 1 }}>
+                  {customConfirm.message}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '75px', height: '23px', fontWeight: 'bold' }} 
+                  onClick={() => {
+                    customConfirm.onConfirm();
+                    setCustomConfirm(null);
+                  }}
+                  autoFocus
+                >
+                  Đồng ý
+                </button>
+                <button 
+                  className="classic-btn" 
+                  style={{ minWidth: '75px', height: '23px' }} 
+                  onClick={() => setCustomConfirm(null)}
+                >
+                  Hủy bỏ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {productToDelete && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="classic-dialog" style={{ width: '360px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
@@ -3695,7 +3877,7 @@ function App() {
 
       {imageEditProduct && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="classic-dialog" style={{ width: '420px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
+          <div className="classic-dialog" style={{ width: '600px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
             <div 
               className="dialog-title-bar" 
               style={{
@@ -3711,88 +3893,103 @@ function App() {
                 Mặt hàng: {imageEditProduct.name}
               </div>
 
-              {/* iPhone Capture integration */}
-              <div className="classic-fieldset" style={{ border: '1px dashed var(--border-dark)', padding: '10px', background: '#f5f8fa', borderRadius: '4px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-blue)' }}>📸 Tích hợp iPhone Camera</span>
-                  {!isPollingActive ? (
-                    <button className="classic-btn" style={{ minWidth: 'auto', padding: '2px 8px', fontWeight: 'bold' }} onClick={startIPhoneCapture}>
-                      Chụp bằng iPhone
-                    </button>
-                  ) : (
-                    <button className="classic-btn" style={{ minWidth: 'auto', padding: '2px 8px', color: 'red' }} onClick={stopIPhoneCapture}>
-                      Hủy kết nối
-                    </button>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                {/* Left Column: Preview & URL Input */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Image Preview Container */}
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div style={{ 
+                      width: '100%', 
+                      height: '180px', 
+                      border: '2px inset #808080', 
+                      background: '#f0f0f0', 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      alignItems: 'center',
+                      overflow: 'hidden'
+                    }}>
+                      {imageEditLink ? (
+                        <img 
+                          src={imageEditLink} 
+                          alt="Preview" 
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <span style={{ color: '#808080', fontSize: '11px', fontStyle: 'italic' }}>Chưa có hình ảnh</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* URL/Link Input */}
+                  <div className="form-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Đường dẫn hình ảnh (URL):</span>
+                    <textarea 
+                      className="classic-input" 
+                      style={{ width: '100%', height: '50px', padding: '4px', fontSize: '11px', resize: 'none' }} 
+                      value={imageEditLink} 
+                      onChange={e => setImageEditLink(e.target.value)} 
+                      placeholder="Dán link hình ảnh tại đây..."
+                    />
+                  </div>
+
+                  {imageEditLink && (
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <button 
+                        className="classic-btn" 
+                        style={{ height: '24px', color: 'red', width: '100%' }}
+                        onClick={() => {
+                          if (imageEditLink) {
+                            if (sessionUploadedImages.includes(imageEditLink)) {
+                              deleteGoogleDriveImage(imageEditLink);
+                              setSessionUploadedImages(prev => prev.filter(url => url !== imageEditLink));
+                            }
+                            setImageEditLink("");
+                          }
+                        }}
+                      >
+                        Xóa ảnh
+                      </button>
+                    </div>
                   )}
                 </div>
-                {isPollingActive && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginTop: '4px', borderTop: '1px solid #c0c0c0', paddingTop: '8px' }}>
-                    <div style={{ padding: '4px', background: '#fff', border: '1px solid #ccc', display: 'flex', justifyContent: 'center' }}>
+
+                {/* Right Column: QR Sync & Instructions */}
+                <div style={{ width: '280px', display: 'flex', flexDirection: 'column' }}>
+                  <div className="classic-fieldset" style={{ border: '1px dashed var(--border-dark)', padding: '10px', background: '#f5f8fa', borderRadius: '4px', height: '100%', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '11px', color: 'var(--text-blue)', borderBottom: '1px solid #c0c0c0', paddingBottom: '4px', width: '100%', textAlign: 'center' }}>
+                      📸 Đồng bộ Camera iPhone
+                    </div>
+                    
+                    {/* Large QR Code */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: '#fff', border: '1px solid #ccc', padding: '8px' }}>
                       <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
-                          `${gasUrl}?session=${pollingSessionId}&token=${gasToken}&sku=${encodeURIComponent(imageEditProduct.sku || imageEditProduct.name)}`
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                          `${gasUrl}?session=${iphoneSessionId}&token=${gasToken}&sku=sync`
                         )}`} 
                         alt="QR Code" 
                         style={{ width: '140px', height: '140px' }}
                       />
+                      <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', fontWeight: 'bold' }}>Quét mã để kết nối</div>
                     </div>
-                    <div style={{ fontSize: '10px', color: '#666', textAlign: 'center', lineHeight: '1.3' }}>
-                      <strong>Hướng dẫn:</strong> Quét mã QR bằng iPhone để mở Camera.<br />Chụp ảnh, bấm "Tải lên", ảnh sẽ tự động hiện tại đây.
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#0056b3', fontStyle: 'italic', fontWeight: 'bold' }} className="blink-text">
-                      ⌛ Đang kết nối, chờ ảnh chụp từ iPhone...
+                    
+                    {/* Instructions & Status */}
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                      <div style={{ fontSize: '11px', color: '#2e7d32', fontWeight: 'bold', textAlign: 'center' }}>
+                        🟢 Camera iPhone Sẵn Sàng
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#444', lineHeight: '1.4', background: '#fff', border: '1px solid #e0e0e0', padding: '6px', borderRadius: '3px' }}>
+                        1. Mở camera điện thoại quét mã QR (chỉ quét 1 lần).<br />
+                        2. Chụp ảnh trên điện thoại và bấm gửi.<br />
+                        3. Ảnh sẽ tự động tải lên và lưu vào CSDL.
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#0056b3', fontStyle: 'italic', fontWeight: 'bold', textAlign: 'center', marginTop: '2px' }} className="blink-text">
+                        ⌛ Chờ ảnh chụp cho [{imageEditProduct.sku}]...
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-              
-              {/* Image Preview Container */}
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '8px' }}>
-                <div style={{ 
-                  width: '180px', 
-                  height: '180px', 
-                  border: '2px inset #808080', 
-                  background: '#f0f0f0', 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'center',
-                  overflow: 'hidden'
-                }}>
-                  {imageEditLink ? (
-                    <img 
-                      src={imageEditLink} 
-                      alt="Preview" 
-                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                    />
-                  ) : (
-                    <span style={{ color: '#808080', fontSize: '11px', fontStyle: 'italic' }}>Chưa có hình ảnh</span>
-                  )}
                 </div>
               </div>
-              
-              {/* URL/Link Input */}
-              <div className="form-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Đường dẫn hình ảnh (URL):</span>
-                <textarea 
-                  className="classic-input" 
-                  style={{ width: '100%', height: '50px', padding: '4px', fontSize: '11px', resize: 'none' }} 
-                  value={imageEditLink} 
-                  onChange={e => setImageEditLink(e.target.value)} 
-                  placeholder="Dán link hình ảnh tại đây..."
-                />
-              </div>
-
-              {imageEditLink && (
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
-                  <button 
-                    className="classic-btn" 
-                    style={{ height: '24px', color: 'red', width: '100%' }}
-                    onClick={() => setImageEditLink("")}
-                  >
-                    Xóa ảnh
-                  </button>
-                </div>
-              )}
               
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '8px', borderTop: '1px solid #c0c0c0', paddingTop: '8px' }}>
                 <button 

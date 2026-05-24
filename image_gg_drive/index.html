@@ -32,13 +32,14 @@
       font-size: 20px;
     }
     .sku-info {
-      font-size: 14px;
+      font-size: 15px;
       background-color: #383838;
-      padding: 8px 12px;
+      padding: 10px 14px;
       border-radius: 6px;
       margin-bottom: 20px;
       color: #e2e8f0;
       word-break: break-all;
+      border-left: 4px solid #38bdf8;
     }
     .btn {
       background-color: #0284c7;
@@ -96,18 +97,37 @@
     input[type="file"] {
       display: none;
     }
+    .sync-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background-color: #4ade80;
+      border-radius: 50%;
+      margin-right: 6px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.5; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.5; }
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
   <h2>📸 CHỤP ẢNH SẢN PHẨM</h2>
-  <div class="sku-info">
-    Mặt hàng: <strong><?= sku ?></strong>
+  
+  <div style="font-size: 11px; color: #a1a1aa; margin-bottom: 8px; display: flex; align-items: center; justify-content: center;">
+    <span class="sync-indicator"></span> Chế độ chụp đồng bộ trực tiếp
+  </div>
+  
+  <div class="sku-info" id="productContainer">
+    Mặt hàng: <strong id="skuName">Đang tải...</strong>
   </div>
 
   <!-- Nút Chụp Ảnh (Dùng input capture) -->
-  <button class="btn" onclick="triggerCamera()">MỞ CAMERA CHỤP ẢNH</button>
+  <button class="btn" id="cameraBtn" onclick="triggerCamera()" style="display: none;">MỞ CAMERA CHỤP ẢNH</button>
   <input type="file" id="cameraInput" accept="image/*" capture="camera" onchange="handleImage(event)">
 
   <img id="preview" alt="Preview ảnh chụp">
@@ -118,14 +138,29 @@
   </button>
 
   <div class="loader" id="loader"></div>
-  <div id="status">Bấm nút phía trên để bắt đầu chụp ảnh từ camera iPhone của bạn.</div>
+  <div id="status">Vui lòng chọn mặt hàng trên máy tính để bắt đầu.</div>
 </div>
 
 <script>
   var session = "<?= session ?>";
   var token = "<?= token ?>";
-  var sku = "<?= sku ?>";
+  var initialSku = "<?= sku ?>";
+  var activeSku = "";
+  var activeName = "";
+  var isSyncMode = (initialSku === "sync" || !initialSku);
   var compressedBase64 = null;
+
+  // Khởi tạo hiển thị ban đầu
+  if (!isSyncMode) {
+    activeSku = initialSku;
+    activeName = initialSku;
+    document.getElementById('skuName').innerText = initialSku;
+    document.getElementById('cameraBtn').style.display = "inline-block";
+    document.getElementById('status').innerText = "Bấm nút phía trên để chụp ảnh.";
+  } else {
+    document.getElementById('skuName').innerText = "Đang đợi máy tính chọn sản phẩm...";
+    startSyncPolling();
+  }
 
   function triggerCamera() {
     document.getElementById('cameraInput').click();
@@ -147,9 +182,8 @@
     reader.onload = function(e) {
       var img = new Image();
       img.onload = function() {
-        // Nén ảnh bằng Canvas để tối ưu dung lượng (khoảng 150KB - 200KB)
         var canvas = document.createElement('canvas');
-        var max_size = 1024; // Chiều rộng/cao tối đa
+        var max_size = 1024;
         var width = img.width;
         var height = img.height;
 
@@ -170,24 +204,64 @@
         
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-
-        // Xuất ra base64 dạng JPG với chất lượng 80%
         compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
         
         preview.src = compressedBase64;
         preview.style.display = "block";
         uploadBtn.style.display = "inline-block";
-        uploadBtn.className = "btn"; // Đổi màu thành nút chính
-        status.innerText = "Đã chụp ảnh thành công! Bấm nút 'TẢI ẢNH LÊN MÁY TÍNH' dưới đây.";
+        uploadBtn.className = "btn";
+        status.innerText = "Đã chụp ảnh! Bấm nút 'TẢI ẢNH LÊN MÁY TÍNH' dưới đây.";
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   }
 
+  function startSyncPolling() {
+    setInterval(function() {
+      if (document.hidden) return; // Không poll nếu tắt màn hình hoặc chuyển app khác
+      
+      google.script.run
+        .withSuccessHandler(function(responseStr) {
+          try {
+            var data = JSON.parse(responseStr);
+            if (data.status === "success") {
+              if (data.sku && data.sku !== activeSku) {
+                activeSku = data.sku;
+                activeName = data.name;
+                
+                document.getElementById('skuName').innerText = activeName;
+                document.getElementById('cameraBtn').style.display = "inline-block";
+                document.getElementById('status').innerText = "Đã nhận dạng mặt hàng mới. Hãy bấm nút Chụp ảnh!";
+                
+                // Reset ảnh cũ khi đổi sang sản phẩm mới
+                compressedBase64 = null;
+                document.getElementById('preview').style.display = "none";
+                document.getElementById('uploadBtn').style.display = "none";
+              } else if (!data.sku) {
+                document.getElementById('skuName').innerText = "Đang đợi máy tính chọn sản phẩm...";
+                document.getElementById('cameraBtn').style.display = "none";
+                document.getElementById('preview').style.display = "none";
+                document.getElementById('uploadBtn').style.display = "none";
+                document.getElementById('status').innerText = "Vui lòng chọn mặt hàng trên máy tính để bắt đầu.";
+                activeSku = "";
+                activeName = "";
+              }
+            }
+          } catch(e) {}
+        })
+        .getActiveProduct(session, token);
+    }, 2000);
+  }
+
   function uploadImage() {
+    var targetSku = isSyncMode ? activeSku : initialSku;
     if (!compressedBase64) {
       alert("Vui lòng chụp ảnh trước!");
+      return;
+    }
+    if (!targetSku || targetSku === "sync") {
+      alert("Chưa chọn mặt hàng nào trên máy tính!");
       return;
     }
 
@@ -202,18 +276,17 @@
     var payload = JSON.stringify({
       session: session,
       token: token,
-      sku: sku,
+      sku: targetSku,
       image: compressedBase64
     });
 
-    // Sử dụng google.script.run chính chủ của Google để giao tiếp
     google.script.run
       .withSuccessHandler(function(responseStr) {
         loader.style.display = "none";
         try {
           var data = JSON.parse(responseStr);
           if (data.status === "success") {
-            status.innerHTML = "<span style='color: #4ade80; font-weight: bold;'>TẢI LÊN THÀNH CÔNG!</span><br>Màn hình ứng dụng trên máy tính sẽ hiển thị ảnh sau vài giây.";
+            status.innerHTML = "<span style='color: #4ade80; font-weight: bold;'>TẢI LÊN THÀNH CÔNG!</span><br>Máy tính đã tự động lưu ảnh. Bạn có thể chọn mặt hàng khác.";
             compressedBase64 = null;
             document.getElementById('preview').style.display = "none";
           } else {

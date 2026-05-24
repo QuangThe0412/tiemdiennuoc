@@ -228,7 +228,8 @@ async fn fetch_products_db(server: String, db_name: String, user: String, pass: 
             CAST(m.DonGiaVon AS FLOAT) as DonGiaVon, 
             CAST(m.TonKhoTT AS FLOAT) as TonKhoTT, 
             m.Active, 
-            a.AnhMon 
+            a.AnhMon,
+            a.URL
         FROM Mon m 
         LEFT JOIN AnhMon a ON m.IDMon = a.IDMon
     ").await.map_err(|e| e.to_string())?;
@@ -248,8 +249,18 @@ async fn fetch_products_db(server: String, db_name: String, user: String, pass: 
         let min_stock: f64 = row.get::<f64, _>("TonKhoTT").unwrap_or(0.0);
         let active: bool = row.get("Active").unwrap_or(true);
         
-        let image_bytes: Option<&[u8]> = row.get("AnhMon");
-        let image_base64 = image_bytes.map(|b| format!("data:image/jpeg;base64,{}", to_base64(b))).unwrap_or_default();
+        let image_url: Option<&str> = row.get("URL");
+        let image_base64 = if let Some(url) = image_url {
+            if !url.is_empty() {
+                url.to_string()
+            } else {
+                let image_bytes: Option<&[u8]> = row.get("AnhMon");
+                image_bytes.map(|b| format!("data:image/jpeg;base64,{}", to_base64(b))).unwrap_or_default()
+            }
+        } else {
+            let image_bytes: Option<&[u8]> = row.get("AnhMon");
+            image_bytes.map(|b| format!("data:image/jpeg;base64,{}", to_base64(b))).unwrap_or_default()
+        };
         
         let p = serde_json::json!({
             "id": id,
@@ -294,23 +305,14 @@ async fn save_product_db(
     let stock = p["stock"].as_f64().unwrap_or(0.0);
     let active = p["available"].as_bool().unwrap_or(true);
     let img_base64 = p["link"].as_str().unwrap_or("");
+    let is_url = img_base64.starts_with("http://") || img_base64.starts_with("https://");
+    let is_base64 = img_base64.starts_with("data:image/");
     
-    let img_bytes = if img_base64.starts_with("data:image/") {
+    let img_bytes = if is_base64 {
         if let Some(pos) = img_base64.find(",") {
             from_base64(&img_base64[(pos + 1)..])
         } else {
             None
-        }
-    } else if img_base64.starts_with("http://") || img_base64.starts_with("https://") {
-        match reqwest::get(img_base64).await {
-            Ok(resp) => {
-                if let Ok(bytes) = resp.bytes().await {
-                    Some(bytes.to_vec())
-                } else {
-                    None
-                }
-            }
-            Err(_) => None,
         }
     } else {
         None
@@ -353,13 +355,17 @@ async fn save_product_db(
     }
     
     if target_id > 0 {
-        if let Some(bytes) = img_bytes {
+        if is_url || is_base64 {
             let query = client.query("SELECT IDMon FROM AnhMon WHERE IDMon = @P1", &[&target_id]).await.map_err(|e| e.to_string())?;
             let row = query.into_row().await.map_err(|e| e.to_string())?;
+            
+            let bytes_val: Option<&[u8]> = if is_base64 { img_bytes.as_deref() } else { None };
+            let url_val: Option<&str> = if is_url { Some(img_base64) } else { None };
+            
             if row.is_some() {
-                client.execute("UPDATE AnhMon SET AnhMon = @P1 WHERE IDMon = @P2", &[&bytes, &target_id]).await.map_err(|e| e.to_string())?;
+                client.execute("UPDATE AnhMon SET AnhMon = @P1, URL = @P2 WHERE IDMon = @P3", &[&bytes_val, &url_val, &target_id]).await.map_err(|e| e.to_string())?;
             } else {
-                client.execute("INSERT INTO AnhMon (IDMon, AnhMon) VALUES (@P1, @P2)", &[&target_id, &bytes]).await.map_err(|e| e.to_string())?;
+                client.execute("INSERT INTO AnhMon (IDMon, AnhMon, URL) VALUES (@P1, @P2, @P3)", &[&target_id, &bytes_val, &url_val]).await.map_err(|e| e.to_string())?;
             }
         } else if img_base64.is_empty() {
             client.execute("DELETE FROM AnhMon WHERE IDMon = @P1", &[&target_id]).await.map_err(|e| e.to_string())?;
@@ -876,6 +882,121 @@ async fn get_database_schema(
     Ok(serde_json::to_string(&list).unwrap())
 }
 
+#[tauri::command]
+async fn backup_database(
+    app: tauri::AppHandle,
+    server: String,
+    db_name: String,
+    user: String,
+    pass: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if !app_dir.exists() {
+        fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
+    }
+
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+
+    // Query default backup directory of the SQL Server instance
+    let query_path = client.simple_query("SELECT CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS NVARCHAR(4000)) AS BackupDir").await.map_err(|e| e.to_string())?;
+    let rows_path = query_path.into_first_result().await.map_err(|e| e.to_string())?;
+    let mut backup_dir = String::from("C:\\Windows\\Temp");
+    if let Some(row) = rows_path.first() {
+        let path: &str = row.get("BackupDir").unwrap_or("");
+        if !path.is_empty() {
+            backup_dir = path.to_string();
+        }
+    }
+
+    let date_str = chrono::Local::now().format("%Y%m%d").to_string();
+    let backup_filename = format!("{}_{}.bak", date_str, db_name);
+    let dest_path = app_dir.join(&backup_filename);
+    let temp_backup_path = format!("{}\\{}_temp.bak", backup_dir.trim_end_matches('\\'), db_name);
+
+    let clean_db_name = db_name.replace("'", "''").replace("[", "").replace("]", "");
+    let sql = format!(
+        "BACKUP DATABASE [{}] TO DISK = '{}' WITH FORMAT, INIT",
+        clean_db_name, temp_backup_path
+    );
+
+    // Run backup database command and consume the stream to wait for execution to complete
+    let stream = client.simple_query(sql).await.map_err(|e| format!("Lỗi khởi chạy SQL Backup: {}", e))?;
+    let _ = stream.into_first_result().await.map_err(|e| format!("Lỗi thực thi SQL Backup: {}", e))?;
+
+    let temp_file_path = std::path::Path::new(&temp_backup_path);
+    if temp_file_path.exists() {
+        fs::copy(temp_file_path, &dest_path).map_err(|e| format!("Lỗi sao chép file backup từ '{}' sang '{}': {}", temp_backup_path, dest_path.to_string_lossy(), e))?;
+        let _ = fs::remove_file(temp_file_path);
+        Ok(format!("Đã sao lưu thành công tại: {}", dest_path.to_string_lossy()))
+    } else {
+        Ok(format!(
+            "Đã chạy lệnh sao lưu trên SQL Server từ xa. File backup được lưu trên máy chủ tại: {}",
+            temp_backup_path
+        ))
+    }
+}
+
+#[tauri::command]
+async fn fix_init_db(
+    server: String,
+    db_name: String,
+    user: String,
+    pass: String,
+) -> Result<String, String> {
+    let config = get_mssql_config(&server, &db_name, &user, &pass);
+    let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| e.to_string())?;
+    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+    let mut client = Client::connect(config, tcp.compat_write()).await.map_err(|e| e.to_string())?;
+
+    // Check table AnhMon exists
+    let query_table = client.query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AnhMon'", &[]).await.map_err(|e| e.to_string())?;
+    let row_table = query_table.into_row().await.map_err(|e| e.to_string())?;
+    if row_table.is_none() {
+        client.execute("
+            CREATE TABLE AnhMon (
+                IDMon INT PRIMARY KEY FOREIGN KEY REFERENCES Mon(IDMon) ON DELETE CASCADE,
+                AnhMon VARBINARY(MAX) NULL,
+                URL NVARCHAR(MAX) NULL
+            )
+        ", &[]).await.map_err(|e| format!("Lỗi tạo bảng AnhMon: {}", e))?;
+        return Ok("Bảng AnhMon chưa tồn tại, đã khởi tạo bảng mới chứa cột URL thành công!".to_string());
+    }
+
+    // Check column URL exists
+    let query_col = client.query(
+        "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'AnhMon' AND COLUMN_NAME = 'URL'",
+        &[]
+    ).await.map_err(|e| e.to_string())?;
+    
+    let row_col = query_col.into_row().await.map_err(|e| e.to_string())?;
+    if row_col.is_none() {
+        client.execute("ALTER TABLE AnhMon ADD URL NVARCHAR(MAX) NULL", &[]).await.map_err(|e| format!("Lỗi thêm cột URL: {}", e))?;
+        Ok("Đã thêm thành công cột URL vào bảng AnhMon!".to_string())
+    } else {
+        Ok("Cột URL đã tồn tại trong bảng AnhMon, không cần thay đổi gì.".to_string())
+    }
+}
+
+#[tauri::command]
+async fn delete_drive_image_rust(delete_url: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::default())
+        .build()
+        .map_err(|e| e.to_string())?;
+        
+    let res = client.get(&delete_url)
+        .send()
+        .await
+        .map_err(|e| format!("Lỗi kết nối tới Apps Script: {}", e))?;
+        
+    let body = res.text().await.map_err(|e| format!("Lỗi đọc dữ liệu Apps Script: {}", e))?;
+    Ok(body)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -901,7 +1022,10 @@ pub fn run() {
             get_database_schema,
             fetch_invoices_db,
             fetch_invoice_details_db,
-            save_invoice_db
+            save_invoice_db,
+            backup_database,
+            fix_init_db,
+            delete_drive_image_rust
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
