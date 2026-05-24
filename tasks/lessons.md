@@ -78,8 +78,9 @@
 
 ## Mouse Wheel/Scroll Resizing Gestures for Non-Intrusive Panel Sizing
 - **Problem**: Drag-resizing handles can sometimes take up space or feel clunky/fidgety to use on smaller auxiliary panels (like detail sidebars).
-- **Solution/Pattern**: Implement an `onWheel` event handler in React that intercepts wheel delta values (`e.deltaY`) to increase or decrease the width state (bounded between sensible min and max constraints). Adding a distinct cursor type (`cursor: 'ew-resize'`) and a tooltip tells the user they can scroll on the panel to change its width instantly without needing to grab a tiny handle.
-
-
-
-
+- **Solution/Pattern**: Implement an `onWheel` event handler in React that intercepts wheel delta values (`e.deltaY`) to increase or decrease the width state (bounded between sensible min and max constraints). Adding a distinct cursor type (`cursor: 'ew-resize'`) and a tooltip tells the user they can scroll on the panel to change its width instantly without needing to grab a tiny handle.## Network Printer Scanning – Common Pitfalls
+- **Problem 1: `ipconfig` parsing fails silently** – `split(':').last()` is wrong on Windows because the format `"  IPv4 Address. . . . . . . . . . . : 192.168.1.1"` may contain `"(Preferred)"` suffix. Must use `rfind(':')` to get the LAST colon, then `.split('(').next()` to strip the suffix, then validate all 4 octets are valid u8.
+- **Problem 2: Timeout too short** – 600ms is insufficient over WiFi where ARP resolution + TCP handshake can easily take 800-1200ms. Set to at least 1500ms for reliable detection.
+- **Problem 3: Only scanning port 9100** – Many cheap thermal printers (Xprinter, Gprinter) use 9100 by default, but some use 515 (LPD), 6101 (older Epson), or 8080. Always scan multiple common ports.
+- **Problem 4: Return format** – When multi-port scanning, return `"IP:port"` so the frontend can display which port was found AND pass the same `"IP:port"` string directly to `TcpStream::connect()`, which accepts both `"IP:port"` and parsed `SocketAddr`.
+- **Solution Pattern**: Scan ports `[9100, 515, 6101, 8080]` concurrently, return label as `"IP:port"`, let user click to select. On print, accept either `"IP"` (auto-append `:9100`) or `"IP:port"` directly.

@@ -56,6 +56,13 @@
 - [x] Cố định kích thước `width`, `minWidth`, `maxWidth` ở mức `200px` cho khung ảnh sản phẩm (`pos-image-panel`) bên tab Bán hàng nhằm triệt tiêu hiện tượng xê dịch/thay đổi chiều rộng cột danh sách khi chuyển đổi giữa các dòng có ảnh và không có ảnh.
 - [x] Tích hợp sự kiện cuộn chuột (`onWheel`) và con trỏ điều chỉnh `cursor: 'ew-resize'` trên khung ảnh sản phẩm bên tab Bán hàng để người dùng có thể dễ dàng tăng/giảm kích thước rộng của khung ảnh từ 100px đến 600px một cách nhanh chóng và tự nhiên.
 
+## 12. Tích hợp Quét và In qua Máy in Hóa đơn Mạng (24/05/2026)
+- [x] Thêm lệnh `scan_network_printers` trong Tauri Rust backend để dò tìm các thiết bị trong mạng nội bộ đang mở cổng `9100`.
+- [x] Thêm lệnh `print_bill_network` trong Tauri Rust backend để gửi trực tiếp dữ liệu thô (ESC/POS hoặc text thô) tới máy in qua TCP/IP.
+- [x] Cấu hình lưu trữ lựa chọn máy in (Kiểu in: Trình duyệt hoặc Máy in mạng; IP máy in mạng) vào `setting.json` của hệ thống.
+- [x] Thiết kế giao diện cấu hình trong Modal Hệ thống (System Modal) cho phép chọn kiểu in, dò tìm máy in mạng tự động, hiển thị danh sách quét được, nhập IP thủ công và in thử.
+- [x] Cập nhật logic in hóa đơn (`handleReprint` và thanh toán hóa đơn mới) để tự động định dạng và gửi trực tiếp tới máy in mạng nếu được bật.
+
 
 
 

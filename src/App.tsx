@@ -47,6 +47,17 @@ const tauriInvoke = async (cmd: string, args: any = {}): Promise<any> => {
     document.body.removeChild(link);
     return `Thư mục tải xuống của Trình duyệt (${args.fileName})`;
   }
+  if (cmd === "scan_network_printers") {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(["192.168.1.100", "192.168.1.250"]);
+      }, 1000);
+    });
+  }
+  if (cmd === "print_bill_network") {
+    console.log("Mock network print to IP:", args.ip, "Payload:\n", args.payload);
+    return `Gửi lệnh in thành công tới ${args.ip} (giả lập trình duyệt)`;
+  }
   if (cmd === "fetch_invoices_db") {
     const mockInvoices = [
       {
@@ -263,6 +274,10 @@ function App() {
   const [gasToken, setGasToken] = useState("tiem_dien_nuoc_secret_key_2026");
 
   const [iphoneSessionId, setIphoneSessionId] = useState("");
+  const [printMethod, setPrintMethod] = useState("browser");
+  const [networkPrinterIp, setNetworkPrinterIp] = useState("");
+  const [isScanningPrinters, setIsScanningPrinters] = useState(false);
+  const [scannedPrinters, setScannedPrinters] = useState<string[]>([]);
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -592,6 +607,154 @@ function App() {
     refreshRef.current = handleRefresh;
   }, [handleRefresh]);
 
+  const removeVietnameseTones = (str: string): string => {
+    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+    str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+    str = str.replace(/đ/g, "d");
+    str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+    str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+    str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+    str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+    str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+    str = str.replace(/Ỳ|Ý|Y|Ỷ|Ỹ/g, "Y");
+    str = str.replace(/Đ/g, "D");
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  };
+
+  const formatReceiptForNetworkPrinter = (
+    sName: string,
+    sAddress: string,
+    sPhone: string,
+    isReprint: boolean,
+    invoiceNo: string,
+    dateTimeStr: string,
+    customerName: string,
+    customerPhone: string,
+    notes: string,
+    items: Array<{ productName: string; quantity: number; price: number; total: number }>,
+    baseTotal: number,
+    discountTotal: number,
+    invoiceDiscountPercent: number,
+    finalTotal: number
+  ): string => {
+    const cleanShopName = removeVietnameseTones(sName).toUpperCase();
+    const cleanAddress = removeVietnameseTones(sAddress);
+    const cleanPhone = removeVietnameseTones(sPhone);
+    const title = isReprint ? "PHIEU IN LAI" : "PHIEU THANH TOAN";
+    const cleanCustomerName = removeVietnameseTones(customerName);
+    const cleanNotes = removeVietnameseTones(notes);
+
+    const centerText = (text: string) => {
+      const spaces = Math.max(0, Math.floor((40 - text.length) / 2));
+      return " ".repeat(spaces) + text;
+    };
+
+    const lineSeparator = "-".repeat(40);
+    const doubleLineSeparator = "=".repeat(40);
+
+    let p = "";
+    p += centerText(cleanShopName) + "\n";
+    p += centerText("DC: " + cleanAddress) + "\n";
+    p += centerText("SDT: " + cleanPhone) + "\n";
+    p += lineSeparator + "\n";
+    p += centerText(title) + "\n";
+    p += `So phieu: ${invoiceNo}\n`;
+    p += `Thoi gian: ${dateTimeStr}\n`;
+    p += `Khach hang: ${cleanCustomerName}${customerPhone ? ` (${customerPhone})` : ""}\n`;
+    if (cleanNotes) {
+      p += `Ghi chu: ${cleanNotes}\n`;
+    }
+    p += lineSeparator + "\n";
+    
+    // Columns: Ten hang (16), SL (4), D.Gia (9), T.Tien (11) = 40
+    p += "Ten hang".padEnd(16) + "SL".padStart(4) + "D.Gia".padStart(9) + "T.Tien".padStart(11) + "\n";
+    p += lineSeparator + "\n";
+
+    items.forEach(item => {
+      const cleanName = removeVietnameseTones(item.productName);
+      const sl = item.quantity.toString();
+      const dg = item.price.toLocaleString("vi-VN");
+      const tt = item.total.toLocaleString("vi-VN");
+
+      if (cleanName.length > 15) {
+        p += cleanName + "\n";
+        p += "".padEnd(16) + sl.padStart(4) + dg.padStart(9) + tt.padStart(11) + "\n";
+      } else {
+        p += cleanName.padEnd(16) + sl.padStart(4) + dg.padStart(9) + tt.padStart(11) + "\n";
+      }
+    });
+
+    p += lineSeparator + "\n";
+    
+    const formatTotalRow = (label: string, value: string) => {
+      const dotsCount = 40 - label.length - value.length;
+      const dots = dotsCount > 0 ? ".".repeat(dotsCount) : " ";
+      return label + dots + value;
+    };
+
+    p += formatTotalRow("Cong tien hang", baseTotal.toLocaleString("vi-VN") + "d") + "\n";
+    if (discountTotal > 0) {
+      p += formatTotalRow("Giam gia", "-" + discountTotal.toLocaleString("vi-VN") + "d") + "\n";
+    }
+    if (invoiceDiscountPercent > 0) {
+      p += formatTotalRow("Chiet khau HD", invoiceDiscountPercent + "%") + "\n";
+    }
+    p += doubleLineSeparator + "\n";
+    p += formatTotalRow("TONG CONG", finalTotal.toLocaleString("vi-VN") + "d") + "\n";
+    p += doubleLineSeparator + "\n";
+    
+    p += "\n";
+    p += centerText("Cam on Quy khach. Hen gap lai!") + "\n";
+    p += "\n\n";
+
+    return p;
+  };
+
+  const printViaNetwork = async (
+    invoiceNo: string,
+    dateTimeStr: string,
+    customerName: string,
+    customerPhone: string,
+    notes: string,
+    items: Array<{ productName: string; quantity: number; price: number; total: number }>,
+    baseTotal: number,
+    discountTotal: number,
+    invoiceDiscountPercent: number,
+    finalTotal: number,
+    isReprint: boolean = false
+  ) => {
+    if (!networkPrinterIp) {
+      alert("Chưa cấu hình địa chỉ IP máy in mạng! Hãy vào mục Cài đặt để thiết lập.");
+      return;
+    }
+    try {
+      const payload = formatReceiptForNetworkPrinter(
+        shopName,
+        shopAddress,
+        shopPhone,
+        isReprint,
+        invoiceNo,
+        dateTimeStr,
+        customerName,
+        customerPhone,
+        notes,
+        items,
+        baseTotal,
+        discountTotal,
+        invoiceDiscountPercent,
+        finalTotal
+      );
+      const res = await tauriInvoke("print_bill_network", { ip: networkPrinterIp, payload });
+      console.log("Kết quả in hóa đơn mạng:", res);
+    } catch (err: any) {
+      alert("Lỗi kết nối hoặc gửi lệnh tới máy in mạng: " + err.toString());
+    }
+  };
+
   const handleReprint = useCallback(() => {
     if (!selectedInvoice) return;
     const baseTotal = selectedInvoiceDetails.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -621,13 +784,30 @@ function App() {
 
   useEffect(() => {
     if (printJob) {
-      const timer = setTimeout(() => {
-        window.print();
+      if (printMethod === "network") {
+        printViaNetwork(
+          printJob.invoiceNo,
+          printJob.dateTimeStr,
+          printJob.customerName,
+          printJob.customerPhone,
+          printJob.notes,
+          printJob.items,
+          printJob.baseTotal,
+          printJob.discountTotal,
+          printJob.invoiceDiscountPercent,
+          printJob.finalTotal,
+          true
+        );
         setPrintJob(null);
-      }, 150);
-      return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => {
+          window.print();
+          setPrintJob(null);
+        }, 150);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [printJob]);
+  }, [printJob, printMethod, networkPrinterIp]);
 
   const handleMouseDownInvWidth = (e: React.MouseEvent) => {
     setIsDraggingInvWidth(true);
@@ -711,6 +891,8 @@ function App() {
         const sGasUrl = settings.gasUrl || "";
         const sGasToken = settings.gasToken || "tiem_dien_nuoc_secret_key_2026";
         const sIphoneSessionId = settings.iphoneSessionId || `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const sPrintMethod = settings.printMethod || "browser";
+        const sNetworkPrinterIp = settings.networkPrinterIp || "";
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
@@ -722,6 +904,8 @@ function App() {
         setGasUrl(sGasUrl);
         setGasToken(sGasToken);
         setIphoneSessionId(sIphoneSessionId);
+        setPrintMethod(sPrintMethod);
+        setNetworkPrinterIp(sNetworkPrinterIp);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -751,6 +935,54 @@ function App() {
     }
   }, [isSystemModalOpen, zoom]);
 
+  const handleScanPrinters = async () => {
+    setIsScanningPrinters(true);
+    setScannedPrinters([]);
+    try {
+      const result = await tauriInvoke("scan_network_printers") as string[];
+      setScannedPrinters(result);
+      if (result.length === 0) {
+        alert("Không tìm thấy máy in mạng nào đang hoạt động trên cổng 9100.");
+      }
+    } catch (err: any) {
+      alert("Lỗi khi quét máy in: " + err.toString());
+    } finally {
+      setIsScanningPrinters(false);
+    }
+  };
+
+  const handleTestPrintNetwork = async () => {
+    if (!networkPrinterIp) {
+      alert("Vui lòng nhập IP máy in mạng trước!");
+      return;
+    }
+    try {
+      const testPayload = formatReceiptForNetworkPrinter(
+        shopName,
+        shopAddress,
+        shopPhone,
+        false,
+        "TEST-0001",
+        getFormattedDate(new Date()) + " " + getFormattedTime(new Date()),
+        "KHACH TEST MAY IN",
+        "0999888777",
+        "In kiem tra thiet bi",
+        [
+          { productName: "San pham in thu 1", quantity: 1, price: 50000, total: 50000 },
+          { productName: "San pham in thu 2 Cadivi", quantity: 2, price: 15000, total: 30000 }
+        ],
+        80000,
+        0,
+        0,
+        80000
+      );
+      const res = await tauriInvoke("print_bill_network", { ip: networkPrinterIp, payload: testPayload });
+      alert("Lệnh in thử đã được gửi: " + res);
+    } catch (err: any) {
+      alert("Lỗi in thử: " + err.toString());
+    }
+  };
+
   const handleSaveSettings = async () => {
     try {
       const settingsObj = {
@@ -764,7 +996,9 @@ function App() {
         shopPhone,
         gasUrl,
         gasToken,
-        iphoneSessionId
+        iphoneSessionId,
+        printMethod,
+        networkPrinterIp
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
@@ -3123,6 +3357,86 @@ function App() {
                 </div>
               </fieldset>
 
+              {/* Cấu hình Máy in Hóa đơn */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                <legend>Cấu hình Máy in Hóa đơn</legend>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in hóa đơn:</span>
+                  <select
+                    className="classic-input"
+                    style={{ flex: 1, height: '22px' }}
+                    value={printMethod}
+                    onChange={e => setPrintMethod(e.target.value)}
+                  >
+                    <option value="browser">In qua trình duyệt (OS Print)</option>
+                    <option value="network">In qua máy in mạng (TCP/IP)</option>
+                  </select>
+                </div>
+                {printMethod === "network" && (
+                  <>
+                    <div className="form-row">
+                      <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in mạng:</span>
+                      <input 
+                        className="classic-input" 
+                        style={{ flex: 1 }} 
+                        value={networkPrinterIp} 
+                        onChange={e => setNetworkPrinterIp(e.target.value)} 
+                        placeholder="Ví dụ: 192.168.1.100"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                      <button 
+                        className="classic-btn" 
+                        style={{ flex: 1, height: '22px' }} 
+                        onClick={(e) => { e.preventDefault(); handleScanPrinters(); }}
+                        disabled={isScanningPrinters}
+                      >
+                        {isScanningPrinters ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
+                      </button>
+                      <button 
+                        className="classic-btn" 
+                        style={{ flex: 1, height: '22px' }} 
+                        onClick={(e) => { e.preventDefault(); handleTestPrintNetwork(); }}
+                      >
+                        🖨️ In thử (Test)
+                      </button>
+                    </div>
+                    {scannedPrinters.length > 0 && (
+                      <div style={{ 
+                        marginTop: '4px', 
+                        padding: '4px', 
+                        border: '1px dashed var(--border-dark)', 
+                        backgroundColor: '#f9f9f9',
+                        borderRadius: '2px',
+                        fontSize: '10px'
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn):</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {scannedPrinters.map(ip => (
+                            <button
+                              key={ip}
+                              className="classic-btn"
+                              style={{ 
+                                padding: '1px 6px', 
+                                fontSize: '10px', 
+                                minWidth: 'auto', 
+                                height: '18px',
+                                backgroundColor: networkPrinterIp === ip ? '#d1e7dd' : '#fff',
+                                borderColor: networkPrinterIp === ip ? '#a3cfbb' : '#ccc',
+                                color: '#000'
+                              }}
+                              onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); }}
+                            >
+                              🖥️ {ip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </fieldset>
+
               {/* Kết nối MSSQL Database */}
               <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <legend style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '92%', margin: 0, padding: '0 4px' }}>
@@ -3671,7 +3985,33 @@ function App() {
                 <button className="classic-btn" onClick={async () => {
                   try {
                     await handleSaveSaleToDB();
-                    window.print();
+                    if (printMethod === "network") {
+                      const itemsToPrint = cart.map(item => {
+                        const baseAmt = item.product.price * item.quantity;
+                        const disc = item.discount || 0;
+                        const finalAmt = baseAmt - baseAmt * (disc / 100);
+                        return {
+                          productName: item.product.name,
+                          quantity: item.quantity,
+                          price: item.product.price,
+                          total: finalAmt
+                        };
+                      });
+                      await printViaNetwork(
+                        invoiceNo,
+                        invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`,
+                        selectedCustomer.name,
+                        selectedCustomer.phone,
+                        posNotes,
+                        itemsToPrint,
+                        getCartBaseTotal(),
+                        getCartDiscountTotal(),
+                        0,
+                        getCartFinalTotal()
+                      );
+                    } else {
+                      window.print();
+                    }
                     resetPOSAfterSale();
                     alert("Đã gửi lệnh in hóa đơn thành công!");
                   } catch (e) {}

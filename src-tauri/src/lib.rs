@@ -997,6 +997,157 @@ async fn delete_drive_image_rust(delete_url: String) -> Result<String, String> {
     Ok(body)
 }
 
+fn get_local_ip() -> Option<String> {
+    use std::net::UdpSocket;
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                return Some(addr.ip().to_string());
+            }
+        }
+    }
+    None
+}
+
+fn get_local_ips_fallback() -> Vec<String> {
+    let mut ips = Vec::new();
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("ipconfig").output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                // Match both English and Vietnamese ipconfig output
+                // e.g. "   IPv4 Address. . . . . : 192.168.1.100"
+                // or   "   Địa chỉ IPv4 . . . . . : 192.168.1.100"
+                let is_ipv4_line = line.contains("IPv4 Address") 
+                    || line.contains("Địa chỉ IPv4")
+                    || line.contains("IPv4-Adresse")  // German
+                    || (line.contains("IPv4") && line.contains('.'));
+                if is_ipv4_line {
+                    if let Some(colon_pos) = line.rfind(':') {
+                        let raw = &line[colon_pos + 1..];
+                        // Trim whitespace and common suffix like "(Preferred)"
+                        let ip = raw
+                            .split('(')  // remove "(Preferred)" suffix
+                            .next()
+                            .unwrap_or("")
+                            .trim()
+                            .to_string();
+                        // Validate it looks like an IP (x.x.x.x)
+                        let parts: Vec<&str> = ip.split('.').collect();
+                        if parts.len() == 4 && parts.iter().all(|p| p.parse::<u8>().is_ok()) {
+                            ips.push(ip);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ips
+}
+
+fn get_subnet_prefixes() -> Vec<String> {
+    let mut subnets = Vec::new();
+    if let Some(ip) = get_local_ip() {
+        let parts: Vec<&str> = ip.split('.').collect();
+        if parts.len() == 4 {
+            subnets.push(format!("{}.{}.{}", parts[0], parts[1], parts[2]));
+        }
+    }
+    for ip in get_local_ips_fallback() {
+        let parts: Vec<&str> = ip.split('.').collect();
+        if parts.len() == 4 {
+            let subnet = format!("{}.{}.{}", parts[0], parts[1], parts[2]);
+            if !subnets.contains(&subnet) {
+                subnets.push(subnet);
+            }
+        }
+    }
+    if subnets.is_empty() {
+        subnets.push("192.168.1".to_string());
+        subnets.push("192.168.0".to_string());
+    }
+    subnets
+}
+
+#[tauri::command]
+async fn scan_network_printers() -> Result<Vec<String>, String> {
+    use std::net::SocketAddr;
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+    use std::time::Duration;
+
+    // Common thermal printer ports: 9100 (standard RAW/JetDirect), 
+    // 515 (LPD), 6101 (some Epson/cheap models), 8080 (some variants)
+    let ports_to_scan: Vec<u16> = vec![9100, 515, 6101, 8080];
+    let subnets = get_subnet_prefixes();
+    let mut tasks = vec![];
+
+    for subnet in subnets {
+        for i in 1..=254 {
+            for &port in &ports_to_scan {
+                let ip = format!("{}.{}", subnet, i);
+                let addr_str = format!("{}:{}", ip, port);
+                let addr: SocketAddr = match addr_str.parse() {
+                    Ok(a) => a,
+                    Err(_) => continue,
+                };
+                let result_label = format!("{}:{}", ip, port);
+
+                tasks.push(tokio::spawn(async move {
+                    // 1500ms timeout – more tolerant of WiFi/slow network printers
+                    match timeout(Duration::from_millis(1500), TcpStream::connect(&addr)).await {
+                        Ok(Ok(_stream)) => Some(result_label),
+                        _ => None,
+                    }
+                }));
+            }
+        }
+    }
+
+    let mut printers = vec![];
+    for task in tasks {
+        if let Ok(Some(label)) = task.await {
+            if !printers.contains(&label) {
+                printers.push(label);
+            }
+        }
+    }
+
+    Ok(printers)
+}
+
+#[tauri::command]
+async fn print_bill_network(ip: String, payload: String) -> Result<String, String> {
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+    use std::time::Duration;
+
+    // Accept either "192.168.1.100" or "192.168.1.100:9100"
+    let addr_str = if ip.contains(':') {
+        ip.clone()
+    } else {
+        format!("{}:9100", ip)
+    };
+
+    let mut stream = match timeout(Duration::from_secs(5), TcpStream::connect(&addr_str)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(format!("Không thể kết nối tới máy in tại {}: {}", addr_str, e)),
+        Err(_) => return Err(format!("Thời gian kết nối tới máy in tại {} quá hạn (Timeout)!", addr_str)),
+    };
+
+    let mut data = Vec::new();
+    data.extend_from_slice(b"\x1b@"); // Initialize printer
+    data.extend_from_slice(payload.as_bytes()); // Raw payload bytes
+    data.extend_from_slice(b"\n\n\n\n\x1bd\x02\x1dVB\x00"); // Feed 4 lines + cut
+
+    match stream.write_all(&data).await {
+        Ok(_) => Ok(format!("Đã gửi lệnh in thành công tới {}!", addr_str)),
+        Err(e) => Err(format!("Lỗi gửi dữ liệu tới máy in: {}", e)),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1025,7 +1176,9 @@ pub fn run() {
             save_invoice_db,
             backup_database,
             fix_init_db,
-            delete_drive_image_rust
+            delete_drive_image_rust,
+            scan_network_printers,
+            print_bill_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
