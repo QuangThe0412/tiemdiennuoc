@@ -53,6 +53,8 @@
   - Nhấp nút "Xóa ảnh" trên giao diện (xóa ngay lập tức trên Drive).
   - Đóng/Hủy modal sửa ảnh (tự động xóa toàn bộ ảnh nháp chưa lưu).
   - Nhấp "Lưu" (chỉ giữ lại ảnh cuối cùng, tự động xóa các ảnh nháp trung gian khác).
+- [x] Cố định kích thước `width`, `minWidth`, `maxWidth` ở mức `200px` cho khung ảnh sản phẩm (`pos-image-panel`) bên tab Bán hàng nhằm triệt tiêu hiện tượng xê dịch/thay đổi chiều rộng cột danh sách khi chuyển đổi giữa các dòng có ảnh và không có ảnh.
+- [x] Tích hợp sự kiện cuộn chuột (`onWheel`) và con trỏ điều chỉnh `cursor: 'ew-resize'` trên khung ảnh sản phẩm bên tab Bán hàng để người dùng có thể dễ dàng tăng/giảm kích thước rộng của khung ảnh từ 100px đến 600px một cách nhanh chóng và tự nhiên.
 
 
 

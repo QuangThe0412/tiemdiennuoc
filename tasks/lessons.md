@@ -72,6 +72,14 @@
   4. If the user clicks "Delete Image", immediately trash the file from the cloud backend.
   5. If the user cancels or closes the modal, iterate over the session array and trash all unsaved files. Clear the session array upon save/cancel.
 
+## Preventing Flexbox Layout Shifting on Dynamic Images
+- **Problem**: When using `display: flex` container layout, an image container with only `minWidth` (e.g. `minWidth: '200px'`) can stretch dynamically depending on the aspect ratio or resolution of the loaded image. This shifts surrounding columns and controls, creating an irritating layout jump when switching between rows that have images versus rows that have no images (placeholder SVGs).
+- **Solution/Pattern**: Hardcode the layout dimensions strictly by specifying `width`, `minWidth`, and `maxWidth` to the same fixed value (e.g., `200px`) on the container. This forces the container to remain stable, while the child image can use `objectFit: 'contain'` to fit inside without shifting the columns.
+
+## Mouse Wheel/Scroll Resizing Gestures for Non-Intrusive Panel Sizing
+- **Problem**: Drag-resizing handles can sometimes take up space or feel clunky/fidgety to use on smaller auxiliary panels (like detail sidebars).
+- **Solution/Pattern**: Implement an `onWheel` event handler in React that intercepts wheel delta values (`e.deltaY`) to increase or decrease the width state (bounded between sensible min and max constraints). Adding a distinct cursor type (`cursor: 'ew-resize'`) and a tooltip tells the user they can scroll on the panel to change its width instantly without needing to grab a tiny handle.
+
 
 
 

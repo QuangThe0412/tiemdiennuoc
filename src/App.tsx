@@ -244,6 +244,7 @@ function App() {
   const [imageEditProduct, setImageEditProduct] = useState<Product | null>(null);
   const [imageEditLink, setImageEditLink] = useState("");
   const [sessionUploadedImages, setSessionUploadedImages] = useState<string[]>([]);
+  const [posImageWidth, setPosImageWidth] = useState(200);
   const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; price2: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -1464,6 +1465,14 @@ function App() {
     }
   };
 
+  const handleImagePanelWheel = (e: React.WheelEvent) => {
+    setPosImageWidth(prev => {
+      const delta = e.deltaY < 0 ? 15 : -15;
+      const newWidth = prev + delta;
+      return Math.max(100, Math.min(600, newWidth));
+    });
+  };
+
   const deleteGoogleDriveImage = async (imageUrl: string) => {
     if (!imageUrl || !gasUrl || !gasToken) return;
     const isGoogleDriveLink = imageUrl.includes("googleusercontent.com") || imageUrl.includes("drive.google.com");
@@ -2147,7 +2156,20 @@ function App() {
                   </table>
                 </div>
                 {/* Product Image Panel */}
-                <div className="pos-image-panel" style={{ margin: 0, minWidth: '200px', height: '100%', flexDirection: 'column' }}>
+                <div 
+                  className="pos-image-panel" 
+                  onWheel={handleImagePanelWheel}
+                  style={{ 
+                    margin: 0, 
+                    width: `${posImageWidth}px`, 
+                    minWidth: `${posImageWidth}px`, 
+                    maxWidth: `${posImageWidth}px`, 
+                    height: '100%', 
+                    flexDirection: 'column',
+                    cursor: 'ew-resize'
+                  }}
+                  title="Cuộn chuột (Scroll) trên đây để đổi độ rộng"
+                >
                   <div style={{ flex: 1, width: '100%', overflow: 'hidden', padding: '4px' }}>
                     {selectedProduct?.link ? (
                       <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />

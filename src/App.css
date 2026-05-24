@@ -285,6 +285,9 @@ input, select, button {
 }
 
 .pos-image-panel {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
   background-color: #fff;
   border: 1px solid var(--border-dark);
   display: flex;
