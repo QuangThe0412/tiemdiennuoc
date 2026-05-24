@@ -1167,6 +1167,31 @@ async fn print_bill_network(ip: String, payload: String) -> Result<String, Strin
     }
 }
 
+#[tauri::command]
+async fn print_raw_network(ip: String, payload: Vec<u8>) -> Result<String, String> {
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+    use std::time::Duration;
+
+    let addr_str = if ip.contains(':') {
+        ip.clone()
+    } else {
+        format!("{}:9100", ip)
+    };
+
+    let mut stream = match timeout(Duration::from_secs(5), TcpStream::connect(&addr_str)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(format!("Không thể kết nối tới máy in tại {}: {}", addr_str, e)),
+        Err(_) => return Err(format!("Thời gian kết nối tới máy in tại {} quá hạn (Timeout)!", addr_str)),
+    };
+
+    match stream.write_all(&payload).await {
+        Ok(_) => Ok(format!("Đã gửi lệnh in raw thành công tới {}!", addr_str)),
+        Err(e) => Err(format!("Lỗi gửi dữ liệu tới máy in: {}", e)),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1197,7 +1222,8 @@ pub fn run() {
             fix_init_db,
             delete_drive_image_rust,
             scan_network_printers,
-            print_bill_network
+            print_bill_network,
+            print_raw_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -63,6 +63,13 @@
 - [x] Thiết kế giao diện cấu hình trong Modal Hệ thống (System Modal) cho phép chọn kiểu in, dò tìm máy in mạng tự động, hiển thị danh sách quét được, nhập IP thủ công và in thử.
 - [x] Cập nhật logic in hóa đơn (`handleReprint` và thanh toán hóa đơn mới) để tự động định dạng và gửi trực tiếp tới máy in mạng nếu được bật.
 
+## 13. Phân chia Cấu hình Máy in và Tính năng In Tem (24/05/2026)
+- [x] Cập nhật state và storage (`setting.json`) để lưu cấu hình riêng biệt cho 2 loại máy in: Máy in Hóa đơn (`printMethod`, `networkPrinterIp`) và Máy in Tem (`labelPrintMethod`, `labelNetworkPrinterIp`).
+- [x] Tách rõ 2 phần "Cấu hình Máy in Hóa đơn" và "Cấu hình Máy in Tem" trong Modal Cài đặt hệ thống.
+- [x] Thêm cột "In tem" trong tab Sản phẩm.
+- [x] Hiển thị Modal xác nhận thông tin in tem (Tên SP, Giá, Số lượng tem cần in) khi click vào nút "In tem".
+- [x] Xây dựng hàm `formatLabelForNetworkPrinter` và logic gửi lệnh in tem tới máy in tem mạng.
+
 
 
 

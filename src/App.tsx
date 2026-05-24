@@ -258,6 +258,7 @@ function App() {
   const [posImageWidth, setPosImageWidth] = useState(200);
   const [editForm, setEditForm] = useState<{ sku: string; name: string; unit: string; price: number; price2: number; link?: string; available?: boolean } | null>(null);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'advanced'>('general');
   const [zoom, setZoom] = useState(100);
   const [tempZoom, setTempZoom] = useState(100);
   const [mssqlServer, setMssqlServer] = useState("");
@@ -276,8 +277,15 @@ function App() {
   const [iphoneSessionId, setIphoneSessionId] = useState("");
   const [printMethod, setPrintMethod] = useState("browser");
   const [networkPrinterIp, setNetworkPrinterIp] = useState("");
-  const [isScanningPrinters, setIsScanningPrinters] = useState(false);
+  const [labelPrintMethod, setLabelPrintMethod] = useState("browser");
+  const [labelNetworkPrinterIp, setLabelNetworkPrinterIp] = useState("");
+  const [scanningTarget, setScanningTarget] = useState<'receipt' | 'label' | null>(null);
+  const [lastScanTarget, setLastScanTarget] = useState<'receipt' | 'label' | null>(null);
   const [scannedPrinters, setScannedPrinters] = useState<string[]>([]);
+  
+  const [isLabelPrintModalOpen, setIsLabelPrintModalOpen] = useState(false);
+  const [labelPrintProduct, setLabelPrintProduct] = useState<any>(null);
+  const [labelPrintQuantity, setLabelPrintQuantity] = useState(1);
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -759,6 +767,59 @@ function App() {
     return p;
   };
 
+  const getLabelPreviewText = (productName: string, price: number, sku?: string): string => {
+    const cleanName = removeVietnameseTones(productName).toUpperCase();
+    const cleanShop = removeVietnameseTones(shopName).toUpperCase();
+    const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
+    const priceStr = price.toLocaleString("vi-VN") + " VND";
+    
+    const pad = (s: string, len: number) => {
+        if (s.length >= len) return s.substring(0, len);
+        return s + " ".repeat(len - s.length);
+    };
+
+    const w = 24; // width of one label in chars
+    const gap = "  |  ";
+    
+    let p = "";
+    p += pad(cleanShop, w) + gap + pad(cleanShop, w) + "\n";
+    p += pad(cleanName, w) + gap + pad(cleanName, w) + "\n";
+    p += pad("||||||||||||||||||||||", w) + gap + pad("||||||||||||||||||||||", w) + "\n";
+    p += pad("       " + safeSku, w) + gap + pad("       " + safeSku, w) + "\n";
+    p += pad(priceStr, w) + gap + pad(priceStr, w) + "\n";
+    return p;
+  };
+
+  const formatLabelForNetworkPrinter = (productName: string, price: number, sku?: string, quantity: number = 1): Uint8Array => {
+    const cleanName = removeVietnameseTones(productName).toUpperCase();
+    const cleanShop = removeVietnameseTones(shopName).toUpperCase();
+    const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
+    const priceStr = price.toLocaleString("vi-VN") + " VND";
+    
+    let tspl = "";
+    tspl += "SIZE 72 mm, 22 mm\r\n"; // Full width of a 2-column 35x22 roll (35 + 2 gap + 35)
+    tspl += "GAP 2 mm, 0 mm\r\n";
+    tspl += "DIRECTION 1\r\n";
+    tspl += "CLS\r\n";
+    
+    // Label 1 (Left column, starting X = 16 dots / 2mm margin)
+    tspl += `TEXT 16,10,"2",0,1,1,"${cleanShop}"\r\n`;
+    tspl += `TEXT 16,40,"2",0,1,1,"${cleanName}"\r\n`;
+    tspl += `BARCODE 16,70,"128",40,1,0,2,2,"${safeSku}"\r\n`;
+    tspl += `TEXT 16,140,"2",0,1,1,"${priceStr}"\r\n`;
+
+    // Label 2 (Right column, starting X = 16 + 280 (35mm) + 16 (2mm gap) = 312 dots)
+    tspl += `TEXT 312,10,"2",0,1,1,"${cleanShop}"\r\n`;
+    tspl += `TEXT 312,40,"2",0,1,1,"${cleanName}"\r\n`;
+    tspl += `BARCODE 312,70,"128",40,1,0,2,2,"${safeSku}"\r\n`;
+    tspl += `TEXT 312,140,"2",0,1,1,"${priceStr}"\r\n`;
+    
+    const pages = Math.max(1, Math.ceil(quantity / 2));
+    tspl += `PRINT ${pages},1\r\n`;
+    
+    return new TextEncoder().encode(tspl);
+  };
+
   const printViaNetwork = async (
     invoiceNo: string,
     dateTimeStr: string,
@@ -797,6 +858,21 @@ function App() {
       console.log("Kết quả in hóa đơn mạng:", res);
     } catch (err: any) {
       alert("Lỗi kết nối hoặc gửi lệnh tới máy in mạng: " + err.toString());
+    }
+  };
+
+  const printLabelViaNetwork = async (productName: string, price: number, quantity: number, sku?: string) => {
+    if (!labelNetworkPrinterIp) {
+      alert("Chưa cấu hình địa chỉ IP máy in tem mạng! Hãy vào mục Cài đặt để thiết lập.");
+      return;
+    }
+    try {
+      const payload = formatLabelForNetworkPrinter(productName, price, sku, quantity);
+      const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(payload) });
+      console.log("Kết quả in tem mạng:", res);
+      alert(`Đã gửi lệnh in ${quantity} tem thành công!`);
+    } catch (err: any) {
+      alert("Lỗi kết nối hoặc gửi lệnh tới máy in tem: " + err.toString());
     }
   };
 
@@ -938,6 +1014,8 @@ function App() {
         const sIphoneSessionId = settings.iphoneSessionId || `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         const sPrintMethod = settings.printMethod || "browser";
         const sNetworkPrinterIp = settings.networkPrinterIp || "";
+        const sLabelPrintMethod = settings.labelPrintMethod || "browser";
+        const sLabelNetworkPrinterIp = settings.labelNetworkPrinterIp || "";
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
@@ -951,6 +1029,8 @@ function App() {
         setIphoneSessionId(sIphoneSessionId);
         setPrintMethod(sPrintMethod);
         setNetworkPrinterIp(sNetworkPrinterIp);
+        setLabelPrintMethod(sLabelPrintMethod);
+        setLabelNetworkPrinterIp(sLabelNetworkPrinterIp);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -980,8 +1060,9 @@ function App() {
     }
   }, [isSystemModalOpen, zoom]);
 
-  const handleScanPrinters = async () => {
-    setIsScanningPrinters(true);
+  const handleScanPrinters = async (target: 'receipt' | 'label') => {
+    setScanningTarget(target);
+    setLastScanTarget(target);
     setScannedPrinters([]);
     try {
       const result = await tauriInvoke("scan_network_printers") as string[];
@@ -992,7 +1073,7 @@ function App() {
     } catch (err: any) {
       alert("Lỗi khi quét máy in: " + err.toString());
     } finally {
-      setIsScanningPrinters(false);
+      setScanningTarget(null);
     }
   };
 
@@ -1028,6 +1109,20 @@ function App() {
     }
   };
 
+  const handleTestPrintLabelNetwork = async () => {
+    if (!labelNetworkPrinterIp) {
+      alert("Vui lòng nhập IP máy in tem mạng trước!");
+      return;
+    }
+    try {
+      const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000);
+      const res = await tauriInvoke("print_bill_network", { ip: labelNetworkPrinterIp, payload: testPayload });
+      alert("Lệnh in tem thử đã được gửi: " + res);
+    } catch (err: any) {
+      alert("Lỗi in thử tem: " + err.toString());
+    }
+  };
+
   const handleSaveSettings = async () => {
     try {
       const settingsObj = {
@@ -1043,7 +1138,9 @@ function App() {
         gasToken,
         iphoneSessionId,
         printMethod,
-        networkPrinterIp
+        networkPrinterIp,
+        labelPrintMethod,
+        labelNetworkPrinterIp
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
@@ -2589,6 +2686,7 @@ function App() {
                     <th style={{ width: '10%' }}>Đ.giá 2</th>
                     <th style={{ width: '7%' }}>Còn bán</th>
                     <th style={{ width: '8%' }}>Kho</th>
+                    <th style={{ width: '6%', textAlign: 'center' }}>In tem</th>
                     <th style={{ width: '5%', textAlign: 'center' }}>Xóa</th>
                   </tr>
                 </thead>
@@ -2762,6 +2860,21 @@ function App() {
                         ) : (
                           <td className="text-right">{p.stock}</td>
                         )}
+                        <td className="text-center" style={{ padding: '2px 0' }}>
+                          <button
+                            className="classic-btn"
+                            style={{ padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLabelPrintProduct(p);
+                              setLabelPrintQuantity(2);
+                              setIsLabelPrintModalOpen(true);
+                            }}
+                            title="In tem nhãn cho mặt hàng này"
+                          >
+                            🖨️ In
+                          </button>
+                        </td>
                         <td className="text-center" style={{ padding: '2px 0' }}>
                           <button
                             className="classic-btn"
@@ -3285,7 +3398,25 @@ function App() {
               <span className="dialog-title">Cấu hình Hệ thống</span>
               <button className="dialog-close-btn" onClick={() => setIsSystemModalOpen(false)}>✕</button>
             </div>
-            <div className="dialog-body">
+            <div className="dialog-body" style={{ padding: '0' }}>
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border-dark)', backgroundColor: '#e0dfdf' }}>
+                <div 
+                  style={{ padding: '6px 12px', cursor: 'pointer', borderRight: '1px solid var(--border-dark)', backgroundColor: settingsTab === 'general' ? '#fff' : 'transparent', fontWeight: settingsTab === 'general' ? 'bold' : 'normal', borderBottom: settingsTab === 'general' ? '1px solid #fff' : 'none', marginBottom: settingsTab === 'general' ? '-1px' : '0', fontSize: '12px' }}
+                  onClick={() => setSettingsTab('general')}
+                >
+                  Cấu hình chung
+                </div>
+                <div 
+                  style={{ padding: '6px 12px', cursor: 'pointer', borderRight: '1px solid var(--border-dark)', backgroundColor: settingsTab === 'advanced' ? '#fff' : 'transparent', fontWeight: settingsTab === 'advanced' ? 'bold' : 'normal', borderBottom: settingsTab === 'advanced' ? '1px solid #fff' : 'none', marginBottom: settingsTab === 'advanced' ? '-1px' : '0', fontSize: '12px' }}
+                  onClick={() => setSettingsTab('advanced')}
+                >
+                  Nâng cao
+                </div>
+              </div>
+              
+              <div style={{ padding: '10px' }}>
+                {settingsTab === 'general' && (
+                  <>
               {/* Lưu trữ & Cấu hình File */}
               <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                 <legend>Đường dẫn Cấu hình</legend>
@@ -3361,7 +3492,11 @@ function App() {
                   />
                 </div>
               </fieldset>
+              </>
+            )}
 
+            {settingsTab === 'advanced' && (
+              <>
               {/* Cấu hình Chụp ảnh iPhone (Google Drive) */}
               <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                 <legend>Cấu hình Chụp ảnh iPhone (Google Drive)</legend>
@@ -3433,10 +3568,10 @@ function App() {
                       <button 
                         className="classic-btn" 
                         style={{ flex: 1, height: '22px' }} 
-                        onClick={(e) => { e.preventDefault(); handleScanPrinters(); }}
-                        disabled={isScanningPrinters}
+                        onClick={(e) => { e.preventDefault(); handleScanPrinters('receipt'); }}
+                        disabled={scanningTarget !== null}
                       >
-                        {isScanningPrinters ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
+                        {scanningTarget === 'receipt' ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
                       </button>
                       <button 
                         className="classic-btn" 
@@ -3446,7 +3581,7 @@ function App() {
                         🖨️ In thử (Test)
                       </button>
                     </div>
-                    {scannedPrinters.length > 0 && (
+                    {lastScanTarget === 'receipt' && scannedPrinters.length > 0 && scanningTarget === null && (
                       <div style={{ 
                         marginTop: '4px', 
                         padding: '4px', 
@@ -3470,7 +3605,87 @@ function App() {
                                 borderColor: networkPrinterIp === ip ? '#a3cfbb' : '#ccc',
                                 color: '#000'
                               }}
-                              onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); }}
+                              onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); setScannedPrinters([]); }}
+                            >
+                              🖥️ {ip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </fieldset>
+
+              {/* Cấu hình Máy in Tem */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                <legend>Cấu hình Máy in Tem</legend>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in tem:</span>
+                  <select
+                    className="classic-input"
+                    style={{ flex: 1, height: '22px' }}
+                    value={labelPrintMethod}
+                    onChange={e => setLabelPrintMethod(e.target.value)}
+                  >
+                    <option value="browser">Không sử dụng / Chưa có</option>
+                    <option value="network">In qua máy in mạng (TCP/IP)</option>
+                  </select>
+                </div>
+                {labelPrintMethod === "network" && (
+                  <>
+                    <div className="form-row">
+                      <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in tem:</span>
+                      <input 
+                        className="classic-input" 
+                        style={{ flex: 1 }} 
+                        value={labelNetworkPrinterIp} 
+                        onChange={e => setLabelNetworkPrinterIp(e.target.value)} 
+                        placeholder="Ví dụ: 192.168.1.101"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                      <button 
+                        className="classic-btn" 
+                        style={{ flex: 1, height: '22px' }} 
+                        onClick={(e) => { e.preventDefault(); handleScanPrinters('label'); }}
+                        disabled={scanningTarget !== null}
+                      >
+                        {scanningTarget === 'label' ? "⏳ Đang quét..." : "🔍 Dò tìm tự động"}
+                      </button>
+                      <button 
+                        className="classic-btn" 
+                        style={{ flex: 1, height: '22px' }} 
+                        onClick={(e) => { e.preventDefault(); handleTestPrintLabelNetwork(); }}
+                      >
+                        🖨️ In thử Tem
+                      </button>
+                    </div>
+                    {lastScanTarget === 'label' && scannedPrinters.length > 0 && scanningTarget === null && (
+                      <div style={{ 
+                        marginTop: '4px', 
+                        padding: '4px', 
+                        border: '1px dashed var(--border-dark)', 
+                        backgroundColor: '#f9f9f9',
+                        borderRadius: '2px',
+                        fontSize: '10px'
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn làm Máy in Tem):</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {scannedPrinters.map(ip => (
+                            <button
+                              key={ip}
+                              className="classic-btn"
+                              style={{ 
+                                padding: '1px 6px', 
+                                fontSize: '10px', 
+                                minWidth: 'auto', 
+                                height: '18px',
+                                backgroundColor: labelNetworkPrinterIp === ip ? '#d1e7dd' : '#fff',
+                                borderColor: labelNetworkPrinterIp === ip ? '#a3cfbb' : '#ccc',
+                                color: '#000'
+                              }}
+                              onClick={(e) => { e.preventDefault(); setLabelNetworkPrinterIp(ip); setScannedPrinters([]); }}
                             >
                               🖥️ {ip}
                             </button>
@@ -3594,10 +3809,103 @@ function App() {
                   )}
                 </div>
               </fieldset>
+              </>
+            )}
+              </div>
               
               <div className="dialog-buttons" style={{ marginTop: '12px' }}>
                 <button className="classic-btn" onClick={handleSaveSettings}>Lưu lại</button>
                 <button className="classic-btn" onClick={() => setIsSystemModalOpen(false)}>Hủy bỏ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLabelPrintModalOpen && labelPrintProduct && (
+        <div className="modal-overlay">
+          <div className="classic-dialog" style={{ width: '400px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">In Tem Nhãn</span>
+              <button className="dialog-close-btn" onClick={() => setIsLabelPrintModalOpen(false)}>✕</button>
+            </div>
+            <div className="dialog-body">
+              <div className="form-row">
+                <span className="form-label-fixed">Tên mặt hàng:</span>
+                <input 
+                  className="classic-input" 
+                  value={labelPrintProduct.name} 
+                  readOnly 
+                  style={{ flex: 1, backgroundColor: '#f5f5f5' }} 
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed">Đơn giá:</span>
+                <input 
+                  className="classic-input" 
+                  value={formatVND(labelPrintProduct.price) + " đ"} 
+                  readOnly 
+                  style={{ flex: 1, backgroundColor: '#f5f5f5', textAlign: 'right' }} 
+                />
+              </div>
+              <div className="form-row">
+                <span className="form-label-fixed">Số lượng tem:</span>
+                <input 
+                  type="number"
+                  className="classic-input" 
+                  value={labelPrintQuantity} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val) && val > 0) setLabelPrintQuantity(val);
+                  }}
+                  onBlur={(e) => {
+                    let val = parseInt(e.target.value);
+                    if (isNaN(val) || val < 2) val = 2;
+                    else if (val % 2 !== 0) val += 1;
+                    setLabelPrintQuantity(val);
+                  }}
+                  min={2}
+                  step={2}
+                  max={100}
+                  style={{ flex: 1, textAlign: 'right' }} 
+                  autoFocus
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+
+              <div style={{ marginTop: '10px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '4px' }}>Mẫu in (Preview):</div>
+                <div style={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #ccc', 
+                  padding: '8px', 
+                  fontFamily: 'monospace', 
+                  fontSize: '12px', 
+                  whiteSpace: 'pre',
+                  lineHeight: '1.2',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  minHeight: '80px',
+                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                  {getLabelPreviewText(labelPrintProduct.name, labelPrintProduct.price, labelPrintProduct.sku).trim()}
+                </div>
+              </div>
+              
+              <div className="dialog-buttons" style={{ marginTop: '15px' }}>
+                <button 
+                  className="classic-btn" 
+                  onClick={() => {
+                    let finalQty = labelPrintQuantity;
+                    if (finalQty % 2 !== 0) finalQty += 1;
+                    printLabelViaNetwork(labelPrintProduct.name, labelPrintProduct.price, finalQty, labelPrintProduct.sku);
+                    setIsLabelPrintModalOpen(false);
+                  }}
+                  autoFocus
+                >
+                  🖨️ In ngay
+                </button>
+                <button className="classic-btn" onClick={() => setIsLabelPrintModalOpen(false)}>Hủy</button>
               </div>
             </div>
           </div>
