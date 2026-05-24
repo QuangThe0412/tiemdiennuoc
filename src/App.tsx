@@ -257,6 +257,12 @@ function App() {
   const [shopName, setShopName] = useState("Điện nước Tâm Nhi");
   const [shopAddress, setShopAddress] = useState("Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM");
   const [shopPhone, setShopPhone] = useState("0908 123 456");
+  const [gasUrl, setGasUrl] = useState("");
+  const [gasToken, setGasToken] = useState("tiem_dien_nuoc_secret_key_2026");
+  const [isPollingActive, setIsPollingActive] = useState(false);
+  const [pollingSessionId, setPollingSessionId] = useState("");
+  const pollingIntervalRef = useRef<any>(null);
+  const isPollingRef = useRef(false);
 
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [invoiceDateTime, setInvoiceDateTime] = useState<Date | null>(null);
@@ -698,6 +704,8 @@ function App() {
         const sShopName = settings.shopName || "Điện nước Tâm Nhi";
         const sShopAddress = settings.shopAddress || "Khu phố 3, TT. Củ Chi, Củ Chi, TP.HCM";
         const sShopPhone = settings.shopPhone || "0908 123 456";
+        const sGasUrl = settings.gasUrl || "";
+        const sGasToken = settings.gasToken || "tiem_dien_nuoc_secret_key_2026";
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
@@ -706,6 +714,8 @@ function App() {
         setShopName(sShopName);
         setShopAddress(sShopAddress);
         setShopPhone(sShopPhone);
+        setGasUrl(sGasUrl);
+        setGasToken(sGasToken);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -745,7 +755,9 @@ function App() {
         mssqlPass,
         shopName,
         shopAddress,
-        shopPhone
+        shopPhone,
+        gasUrl,
+        gasToken
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
@@ -1426,6 +1438,76 @@ function App() {
     }));
     showAlert(`Đã cập nhật hình ảnh cho mặt hàng "${p.name}" thành công.`, "Thành công", "info");
     setImageEditProduct(null);
+    isPollingRef.current = false;
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsPollingActive(false);
+  };
+
+  const startIPhoneCapture = () => {
+    if (!gasUrl) {
+      alert("Vui lòng cấu hình Google Script URL trong mục Cấu hình hệ thống trước!");
+      return;
+    }
+    const sessionId = "sess_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    setPollingSessionId(sessionId);
+    isPollingRef.current = true;
+    setIsPollingActive(true);
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    pollingIntervalRef.current = setInterval(async () => {
+      if (!isPollingRef.current) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        return;
+      }
+      try {
+        const checkUrl = `${gasUrl}?action=check&session=${sessionId}&token=${gasToken}`;
+        const res = await fetch(checkUrl);
+        const data = await res.json();
+        
+        if (!isPollingRef.current) return;
+
+        if (data.status === "success" && data.imageUrl) {
+          setImageEditLink(data.imageUrl);
+          isPollingRef.current = false;
+          setIsPollingActive(false);
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          alert("Nhận ảnh từ điện thoại thành công!");
+        }
+      } catch (err) {
+        console.error("Lỗi khi kết nối tới Google Apps Script:", err);
+      }
+    }, 2000);
+  };
+
+  const stopIPhoneCapture = () => {
+    isPollingRef.current = false;
+    setIsPollingActive(false);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+
+  const closeImageEditModal = () => {
+    setImageEditProduct(null);
+    isPollingRef.current = false;
+    setIsPollingActive(false);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
   };
 
   const handleSaveTemporary = () => {
@@ -2793,7 +2875,7 @@ function App() {
 
       {isSystemModalOpen && (
         <div className="modal-overlay">
-          <div className="classic-dialog" style={{ width: '450px' }}>
+          <div className="classic-dialog" style={{ width: '480px' }}>
             <div className="dialog-title-bar">
               <span className="dialog-title">Cấu hình Hệ thống</span>
               <button className="dialog-close-btn" onClick={() => setIsSystemModalOpen(false)}>✕</button>
@@ -2871,6 +2953,31 @@ function App() {
                     style={{ flex: 1 }} 
                     value={shopPhone} 
                     onChange={e => setShopPhone(e.target.value)} 
+                  />
+                </div>
+              </fieldset>
+
+              {/* Cấu hình Chụp ảnh iPhone (Google Drive) */}
+              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                <legend>Cấu hình Chụp ảnh iPhone (Google Drive)</legend>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Google Script URL:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1 }} 
+                    value={gasUrl} 
+                    onChange={e => setGasUrl(e.target.value)} 
+                    placeholder="Dán Web App URL của Google Apps Script"
+                  />
+                </div>
+                <div className="form-row">
+                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Khóa bảo mật:</span>
+                  <input 
+                    className="classic-input" 
+                    style={{ flex: 1 }} 
+                    value={gasToken} 
+                    onChange={e => setGasToken(e.target.value)} 
+                    placeholder="Mã bí mật xác thực kết nối điện thoại"
                   />
                 </div>
               </fieldset>
@@ -3597,11 +3704,46 @@ function App() {
               }}
             >
               <span className="dialog-title">Hình ảnh mặt hàng</span>
-              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setImageEditProduct(null)}>✕</button>
+              <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={closeImageEditModal}>✕</button>
             </div>
             <div className="dialog-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#0056b3', borderBottom: '1px solid #c0c0c0', paddingBottom: '4px' }}>
                 Mặt hàng: {imageEditProduct.name}
+              </div>
+
+              {/* iPhone Capture integration */}
+              <div className="classic-fieldset" style={{ border: '1px dashed var(--border-dark)', padding: '10px', background: '#f5f8fa', borderRadius: '4px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-blue)' }}>📸 Tích hợp iPhone Camera</span>
+                  {!isPollingActive ? (
+                    <button className="classic-btn" style={{ minWidth: 'auto', padding: '2px 8px', fontWeight: 'bold' }} onClick={startIPhoneCapture}>
+                      Chụp bằng iPhone
+                    </button>
+                  ) : (
+                    <button className="classic-btn" style={{ minWidth: 'auto', padding: '2px 8px', color: 'red' }} onClick={stopIPhoneCapture}>
+                      Hủy kết nối
+                    </button>
+                  )}
+                </div>
+                {isPollingActive && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginTop: '4px', borderTop: '1px solid #c0c0c0', paddingTop: '8px' }}>
+                    <div style={{ padding: '4px', background: '#fff', border: '1px solid #ccc', display: 'flex', justifyContent: 'center' }}>
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+                          `${gasUrl}?session=${pollingSessionId}&token=${gasToken}&sku=${encodeURIComponent(imageEditProduct.sku || imageEditProduct.name)}`
+                        )}`} 
+                        alt="QR Code" 
+                        style={{ width: '140px', height: '140px' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#666', textAlign: 'center', lineHeight: '1.3' }}>
+                      <strong>Hướng dẫn:</strong> Quét mã QR bằng iPhone để mở Camera.<br />Chụp ảnh, bấm "Tải lên", ảnh sẽ tự động hiện tại đây.
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#0056b3', fontStyle: 'italic', fontWeight: 'bold' }} className="blink-text">
+                      ⌛ Đang kết nối, chờ ảnh chụp từ iPhone...
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Image Preview Container */}
@@ -3663,7 +3805,7 @@ function App() {
                 <button 
                   className="classic-btn" 
                   style={{ minWidth: '85px', height: '23px' }} 
-                  onClick={() => setImageEditProduct(null)}
+                  onClick={closeImageEditModal}
                 >
                   Hủy bỏ
                 </button>

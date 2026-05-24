@@ -301,6 +301,17 @@ async fn save_product_db(
         } else {
             None
         }
+    } else if img_base64.starts_with("http://") || img_base64.starts_with("https://") {
+        match reqwest::get(img_base64).await {
+            Ok(resp) => {
+                if let Ok(bytes) = resp.bytes().await {
+                    Some(bytes.to_vec())
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
     } else {
         None
     };
@@ -341,8 +352,8 @@ async fn save_product_db(
         }
     }
     
-    if let Some(bytes) = img_bytes {
-        if target_id > 0 {
+    if target_id > 0 {
+        if let Some(bytes) = img_bytes {
             let query = client.query("SELECT IDMon FROM AnhMon WHERE IDMon = @P1", &[&target_id]).await.map_err(|e| e.to_string())?;
             let row = query.into_row().await.map_err(|e| e.to_string())?;
             if row.is_some() {
@@ -350,6 +361,8 @@ async fn save_product_db(
             } else {
                 client.execute("INSERT INTO AnhMon (IDMon, AnhMon) VALUES (@P1, @P2)", &[&target_id, &bytes]).await.map_err(|e| e.to_string())?;
             }
+        } else if img_base64.is_empty() {
+            client.execute("DELETE FROM AnhMon WHERE IDMon = @P1", &[&target_id]).await.map_err(|e| e.to_string())?;
         }
     }
     

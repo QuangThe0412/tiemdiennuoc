@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chụp Ảnh Mặt Hàng</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #1a1a1a;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 90vh;
+    }
+    .container {
+      max-width: 400px;
+      width: 100%;
+      background: #2a2a2a;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      box-sizing: border-box;
+    }
+    h2 {
+      margin-top: 0;
+      color: #38bdf8;
+      font-size: 20px;
+    }
+    .sku-info {
+      font-size: 14px;
+      background-color: #383838;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      color: #e2e8f0;
+      word-break: break-all;
+    }
+    .btn {
+      background-color: #0284c7;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      transition: background 0.2s;
+      box-sizing: border-box;
+      margin-bottom: 15px;
+      display: inline-block;
+    }
+    .btn:active {
+      background-color: #0369a1;
+    }
+    .btn-secondary {
+      background-color: #4b5563;
+    }
+    .btn-secondary:active {
+      background-color: #374151;
+    }
+    #preview {
+      max-width: 100%;
+      max-height: 250px;
+      margin: 15px 0;
+      border-radius: 8px;
+      border: 2px dashed #444;
+      display: none;
+    }
+    #status {
+      font-size: 14px;
+      margin-top: 15px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+    .loader {
+      border: 4px solid #333;
+      border-top: 4px solid #38bdf8;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 15px auto;
+      display: none;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    input[type="file"] {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>📸 CHỤP ẢNH SẢN PHẨM</h2>
+  <div class="sku-info">
+    Mặt hàng: <strong><?= sku ?></strong>
+  </div>
+
+  <!-- Nút Chụp Ảnh (Dùng input capture) -->
+  <button class="btn" onclick="triggerCamera()">MỞ CAMERA CHỤP ẢNH</button>
+  <input type="file" id="cameraInput" accept="image/*" capture="camera" onchange="handleImage(event)">
+
+  <img id="preview" alt="Preview ảnh chụp">
+
+  <!-- Nút Tải lên (Ban đầu ẩn) -->
+  <button id="uploadBtn" class="btn btn-secondary" style="display: none;" onclick="uploadImage()">
+    TẢI ẢNH LÊN MÁY TÍNH
+  </button>
+
+  <div class="loader" id="loader"></div>
+  <div id="status">Bấm nút phía trên để bắt đầu chụp ảnh từ camera iPhone của bạn.</div>
+</div>
+
+<script>
+  var session = "<?= session ?>";
+  var token = "<?= token ?>";
+  var sku = "<?= sku ?>";
+  var compressedBase64 = null;
+
+  function triggerCamera() {
+    document.getElementById('cameraInput').click();
+  }
+
+  function handleImage(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var preview = document.getElementById('preview');
+    var status = document.getElementById('status');
+    var uploadBtn = document.getElementById('uploadBtn');
+    
+    status.innerText = "Đang xử lý và nén ảnh...";
+    uploadBtn.style.display = "none";
+    preview.style.display = "none";
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        // Nén ảnh bằng Canvas để tối ưu dung lượng (khoảng 150KB - 200KB)
+        var canvas = document.createElement('canvas');
+        var max_size = 1024; // Chiều rộng/cao tối đa
+        var width = img.width;
+        var height = img.height;
+
+        if (width > height) {
+          if (width > max_size) {
+            height *= max_size / width;
+            width = max_size;
+          }
+        } else {
+          if (height > max_size) {
+            width *= max_size / height;
+            height = max_size;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Xuất ra base64 dạng JPG với chất lượng 80%
+        compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        
+        preview.src = compressedBase64;
+        preview.style.display = "block";
+        uploadBtn.style.display = "inline-block";
+        uploadBtn.className = "btn"; // Đổi màu thành nút chính
+        status.innerText = "Đã chụp ảnh thành công! Bấm nút 'TẢI ẢNH LÊN MÁY TÍNH' dưới đây.";
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function uploadImage() {
+    if (!compressedBase64) {
+      alert("Vui lòng chụp ảnh trước!");
+      return;
+    }
+
+    var uploadBtn = document.getElementById('uploadBtn');
+    var loader = document.getElementById('loader');
+    var status = document.getElementById('status');
+
+    uploadBtn.style.display = "none";
+    loader.style.display = "block";
+    status.innerText = "Đang gửi ảnh lên Google Drive...";
+
+    var payload = JSON.stringify({
+      session: session,
+      token: token,
+      sku: sku,
+      image: compressedBase64
+    });
+
+    // Sử dụng google.script.run chính chủ của Google để giao tiếp
+    google.script.run
+      .withSuccessHandler(function(responseStr) {
+        loader.style.display = "none";
+        try {
+          var data = JSON.parse(responseStr);
+          if (data.status === "success") {
+            status.innerHTML = "<span style='color: #4ade80; font-weight: bold;'>TẢI LÊN THÀNH CÔNG!</span><br>Màn hình ứng dụng trên máy tính sẽ hiển thị ảnh sau vài giây.";
+            compressedBase64 = null;
+            document.getElementById('preview').style.display = "none";
+          } else {
+            status.innerText = "Lỗi từ server: " + data.message;
+            uploadBtn.style.display = "inline-block";
+          }
+        } catch (e) {
+          status.innerText = "Lỗi giải mã phản hồi: " + e.toString();
+          uploadBtn.style.display = "inline-block";
+        }
+      })
+      .withFailureHandler(function(err) {
+        loader.style.display = "none";
+        status.innerText = "Lỗi hệ thống Apps Script: " + err.toString();
+        uploadBtn.style.display = "inline-block";
+      })
+      .uploadImageFromPhone(payload);
+  }
+</script>
+
+</body>
+</html>
