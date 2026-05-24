@@ -202,13 +202,13 @@ function App() {
 
   const [customAlert, setCustomAlert] = useState<{ message: string; title: string; type: 'info' | 'warning' | 'error' } | null>(null);
   const [customConfirm, setCustomConfirm] = useState<{ message: string; title: string; onConfirm: () => void } | null>(null);
-  
+
   const showAlert = useCallback((message: string, title?: string, type?: 'info' | 'warning' | 'error') => {
     let resolvedTitle = title || "";
     let resolvedType = type;
 
     const lowerMessage = String(message).toLowerCase();
-    
+
     // Automatically detect type if not provided
     if (!resolvedType) {
       if (lowerMessage.includes("lỗi") || lowerMessage.includes("thất bại") || lowerMessage.includes("không đúng") || lowerMessage.includes("trống") || lowerMessage.includes("trùng") || lowerMessage.includes("sai")) {
@@ -248,7 +248,7 @@ function App() {
   const [selectedUnitFilter, setSelectedUnitFilter] = useState("");
   const [units, setUnits] = useState<string[]>(["Cuộn", "Cái", "Cây", "Bộ", "Mét", "Thùng"]);
   const [newUnitName, setNewUnitName] = useState("");
-  
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -282,7 +282,7 @@ function App() {
   const [scanningTarget, setScanningTarget] = useState<'receipt' | 'label' | null>(null);
   const [lastScanTarget, setLastScanTarget] = useState<'receipt' | 'label' | null>(null);
   const [scannedPrinters, setScannedPrinters] = useState<string[]>([]);
-  
+
   const [isLabelPrintModalOpen, setIsLabelPrintModalOpen] = useState(false);
   const [labelPrintProduct, setLabelPrintProduct] = useState<any>(null);
   const [labelPrintQuantity, setLabelPrintQuantity] = useState(1);
@@ -408,7 +408,7 @@ function App() {
   }, [isDragging, zoom]);
 
   // refreshRef allows keydown effect to call refresh without circular dep ordering
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
+  const refreshRef = useRef<() => Promise<void>>(async () => { });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -478,7 +478,7 @@ function App() {
           lastCustomerEscPress.current = now;
         }
       }
-      
+
       if (e.key === 'F5') {
         e.preventDefault();
         refreshRef.current();
@@ -622,54 +622,54 @@ function App() {
     // Step 2: Comprehensive Vietnamese → ASCII lookup map
     const VI_MAP: Record<string, string> = {
       // a
-      'à':'a','á':'a','â':'a','ã':'a','ä':'a','å':'a',
-      'ă':'a','ắ':'a','ặ':'a','ằ':'a','ẳ':'a','ẵ':'a',
-      'ấ':'a','ầ':'a','ậ':'a','ẩ':'a','ẫ':'a',
-      'ạ':'a','ả':'a',
+      'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
+      'ă': 'a', 'ắ': 'a', 'ặ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a',
+      'ấ': 'a', 'ầ': 'a', 'ậ': 'a', 'ẩ': 'a', 'ẫ': 'a',
+      'ạ': 'a', 'ả': 'a',
       // A
-      'À':'A','Á':'A','Â':'A','Ã':'A','Ä':'A','Å':'A',
-      'Ă':'A','Ắ':'A','Ặ':'A','Ằ':'A','Ẳ':'A','Ẵ':'A',
-      'Ấ':'A','Ầ':'A','Ậ':'A','Ẩ':'A','Ẫ':'A',
-      'Ạ':'A','Ả':'A',
+      'À': 'A', 'Á': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A', 'Å': 'A',
+      'Ă': 'A', 'Ắ': 'A', 'Ặ': 'A', 'Ằ': 'A', 'Ẳ': 'A', 'Ẵ': 'A',
+      'Ấ': 'A', 'Ầ': 'A', 'Ậ': 'A', 'Ẩ': 'A', 'Ẫ': 'A',
+      'Ạ': 'A', 'Ả': 'A',
       // e
-      'è':'e','é':'e','ê':'e','ë':'e',
-      'ề':'e','ế':'e','ệ':'e','ể':'e','ễ':'e',
-      'ẹ':'e','ẻ':'e','ẽ':'e',
+      'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+      'ề': 'e', 'ế': 'e', 'ệ': 'e', 'ể': 'e', 'ễ': 'e',
+      'ẹ': 'e', 'ẻ': 'e', 'ẽ': 'e',
       // E
-      'È':'E','É':'E','Ê':'E','Ë':'E',
-      'Ề':'E','Ế':'E','Ệ':'E','Ể':'E','Ễ':'E',
-      'Ẹ':'E','Ẻ':'E','Ẽ':'E',
+      'È': 'E', 'É': 'E', 'Ê': 'E', 'Ë': 'E',
+      'Ề': 'E', 'Ế': 'E', 'Ệ': 'E', 'Ể': 'E', 'Ễ': 'E',
+      'Ẹ': 'E', 'Ẻ': 'E', 'Ẽ': 'E',
       // i
-      'ì':'i','í':'i','î':'i','ï':'i',
-      'ị':'i','ỉ':'i','ĩ':'i',
+      'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+      'ị': 'i', 'ỉ': 'i', 'ĩ': 'i',
       // I
-      'Ì':'I','Í':'I','Î':'I','Ï':'I',
-      'Ị':'I','Ỉ':'I','Ĩ':'I',
+      'Ì': 'I', 'Í': 'I', 'Î': 'I', 'Ï': 'I',
+      'Ị': 'I', 'Ỉ': 'I', 'Ĩ': 'I',
       // o
-      'ò':'o','ó':'o','ô':'o','õ':'o','ö':'o',
-      'ồ':'o','ố':'o','ộ':'o','ổ':'o','ỗ':'o',
-      'ơ':'o','ờ':'o','ớ':'o','ợ':'o','ở':'o','ỡ':'o',
-      'ọ':'o','ỏ':'o',
+      'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+      'ồ': 'o', 'ố': 'o', 'ộ': 'o', 'ổ': 'o', 'ỗ': 'o',
+      'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ợ': 'o', 'ở': 'o', 'ỡ': 'o',
+      'ọ': 'o', 'ỏ': 'o',
       // O
-      'Ò':'O','Ó':'O','Ô':'O','Õ':'O','Ö':'O',
-      'Ồ':'O','Ố':'O','Ộ':'O','Ổ':'O','Ỗ':'O',
-      'Ơ':'O','Ờ':'O','Ớ':'O','Ợ':'O','Ở':'O','Ỡ':'O',
-      'Ọ':'O','Ỏ':'O',
+      'Ò': 'O', 'Ó': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
+      'Ồ': 'O', 'Ố': 'O', 'Ộ': 'O', 'Ổ': 'O', 'Ỗ': 'O',
+      'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ợ': 'O', 'Ở': 'O', 'Ỡ': 'O',
+      'Ọ': 'O', 'Ỏ': 'O',
       // u
-      'ù':'u','ú':'u','û':'u','ü':'u',
-      'ư':'u','ừ':'u','ứ':'u','ự':'u','ử':'u','ữ':'u',
-      'ụ':'u','ủ':'u','ũ':'u',
+      'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
+      'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ự': 'u', 'ử': 'u', 'ữ': 'u',
+      'ụ': 'u', 'ủ': 'u', 'ũ': 'u',
       // U
-      'Ù':'U','Ú':'U','Û':'U','Ü':'U',
-      'Ư':'U','Ừ':'U','Ứ':'U','Ự':'U','Ử':'U','Ữ':'U',
-      'Ụ':'U','Ủ':'U','Ũ':'U',
+      'Ù': 'U', 'Ú': 'U', 'Û': 'U', 'Ü': 'U',
+      'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ự': 'U', 'Ử': 'U', 'Ữ': 'U',
+      'Ụ': 'U', 'Ủ': 'U', 'Ũ': 'U',
       // y
-      'ỳ':'y','ý':'y','ỵ':'y','ỷ':'y','ỹ':'y',
-      'Ỳ':'Y','Ý':'Y','Ỵ':'Y','Ỷ':'Y','Ỹ':'Y',
+      'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
+      'Ỳ': 'Y', 'Ý': 'Y', 'Ỵ': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y',
       // d/D
-      'đ':'d','Đ':'D',
+      'đ': 'd', 'Đ': 'D',
       // common Latin extras
-      'ñ':'n','Ñ':'N','ç':'c','Ç':'C',
+      'ñ': 'n', 'Ñ': 'N', 'ç': 'c', 'Ç': 'C',
     };
 
     // Step 3: Replace each non-ASCII character via map; unknown chars → '?'
@@ -722,7 +722,7 @@ function App() {
       p += `Ghi chu: ${cleanNotes}\n`;
     }
     p += lineSeparator + "\n";
-    
+
     // Columns: Ten hang (16), SL (4), D.Gia (9), T.Tien (11) = 40
     p += "Ten hang".padEnd(16) + "SL".padStart(4) + "D.Gia".padStart(9) + "T.Tien".padStart(11) + "\n";
     p += lineSeparator + "\n";
@@ -742,7 +742,7 @@ function App() {
     });
 
     p += lineSeparator + "\n";
-    
+
     const formatTotalRow = (label: string, value: string) => {
       const dotsCount = 40 - label.length - value.length;
       const dots = dotsCount > 0 ? ".".repeat(dotsCount) : " ";
@@ -759,7 +759,7 @@ function App() {
     p += doubleLineSeparator + "\n";
     p += formatTotalRow("TONG CONG", finalTotal.toLocaleString("vi-VN") + "d") + "\n";
     p += doubleLineSeparator + "\n";
-    
+
     p += "\n";
     p += centerText("Cam on Quy khach. Hen gap lai!") + "\n";
     p += "\n\n";
@@ -772,15 +772,15 @@ function App() {
     const cleanShop = removeVietnameseTones(shopName).toUpperCase();
     const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
     const priceStr = price.toLocaleString("vi-VN") + " VND";
-    
+
     const pad = (s: string, len: number) => {
-        if (s.length >= len) return s.substring(0, len);
-        return s + " ".repeat(len - s.length);
+      if (s.length >= len) return s.substring(0, len);
+      return s + " ".repeat(len - s.length);
     };
 
     const w = 24; // width of one label in chars
     const gap = "  |  ";
-    
+
     let p = "";
     p += pad(cleanShop, w) + gap + pad(cleanShop, w) + "\n";
     p += pad(cleanName, w) + gap + pad(cleanName, w) + "\n";
@@ -795,13 +795,13 @@ function App() {
     const cleanShop = removeVietnameseTones(shopName).toUpperCase();
     const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
     const priceStr = price.toLocaleString("vi-VN") + " VND";
-    
+
     let tspl = "";
     tspl += "SIZE 72 mm, 22 mm\r\n"; // Full width of a 2-column 35x22 roll (35 + 2 gap + 35)
     tspl += "GAP 2 mm, 0 mm\r\n";
     tspl += "DIRECTION 1\r\n";
     tspl += "CLS\r\n";
-    
+
     // Label 1 (Left column, starting X = 16 dots / 2mm margin)
     tspl += `TEXT 16,10,"2",0,1,1,"${cleanShop}"\r\n`;
     tspl += `TEXT 16,40,"2",0,1,1,"${cleanName}"\r\n`;
@@ -813,10 +813,10 @@ function App() {
     tspl += `TEXT 312,40,"2",0,1,1,"${cleanName}"\r\n`;
     tspl += `BARCODE 312,70,"128",40,1,0,2,2,"${safeSku}"\r\n`;
     tspl += `TEXT 312,140,"2",0,1,1,"${priceStr}"\r\n`;
-    
+
     const pages = Math.max(1, Math.ceil(quantity / 2));
     tspl += `PRINT ${pages},1\r\n`;
-    
+
     return new TextEncoder().encode(tspl);
   };
 
@@ -1355,13 +1355,13 @@ function App() {
       alert("ĐVT mới này đã tồn tại!");
       return;
     }
-    
+
     // Update units list
     setUnits(prev => prev.map(u => u === oldName ? newNameTrim : u));
-    
+
     // Update all products belonging to the old unit
     setProducts(prev => prev.map(p => p.unit === oldName ? { ...p, unit: newNameTrim } : p));
-    
+
     // Update selected filter if active
     if (selectedUnitFilter === oldName) {
       setSelectedUnitFilter(newNameTrim);
@@ -1369,7 +1369,7 @@ function App() {
     if (inventoryUnitFilter === oldName) {
       setInventoryUnitFilter(newNameTrim);
     }
-    
+
     alert(`Đã đổi tên ĐVT thành "${newNameTrim}" thành công!`);
   };
 
@@ -1380,14 +1380,14 @@ function App() {
     if (productCount > 0) {
       confirmMsg = `ĐVT "${unitToDelete}" đang được sử dụng cho ${productCount} mặt hàng. Nếu xóa, các mặt hàng này sẽ được chuyển sang ĐVT "Cái". Bạn vẫn muốn xóa?`;
     }
-    
+
     if (confirm(confirmMsg)) {
       // Remove from units list
       setUnits(prev => prev.filter(u => u !== unitToDelete));
-      
+
       // Update products' unit
       setProducts(prev => prev.map(p => p.unit === unitToDelete ? { ...p, unit: "Cái" } : p));
-      
+
       // Add "Cái" to units if not already present
       setUnits(prev => {
         if (!prev.includes("Cái")) {
@@ -1403,7 +1403,7 @@ function App() {
       if (inventoryUnitFilter === unitToDelete) {
         setInventoryUnitFilter("");
       }
-      
+
       alert(`Đã xóa ĐVT "${unitToDelete}" thành công.`);
     }
   };
@@ -1473,7 +1473,7 @@ function App() {
       headers.join(","),
       ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(","))
     ].join("\n");
-    
+
     try {
       const savedPath = await tauriInvoke("save_file_to_downloads", {
         fileName: `danh_sach_san_pham_${new Date().toISOString().slice(0, 10)}.csv`,
@@ -1558,7 +1558,7 @@ function App() {
         const price = priceIdx !== -1 ? Number(row[priceIdx]) || 0 : 0;
         const stock = stockIdx !== -1 ? Number(row[stockIdx]) || 0 : 0;
         const link = linkIdx !== -1 ? row[linkIdx]?.trim() || "" : "";
-        
+
         let available = true;
         if (availableIdx !== -1) {
           const val = row[availableIdx]?.trim().toLowerCase();
@@ -1631,6 +1631,52 @@ function App() {
     });
   };
 
+  const barcodeBuffer = useRef("");
+  const barcodeTimeout = useRef<any>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Chỉ kích hoạt ở tab Bán hàng và khi không có Modal nào đang mở
+      if (activeTab !== "pos") return;
+      if (isSystemModalOpen || isCustomerModalOpen || isCheckoutModalOpen || isLabelPrintModalOpen || isPendingModalOpen || isPayDebtModalOpen || isAddDebtModalOpen || isUnitManagerOpen) return;
+
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key !== "Enter" && e.key.length !== 1) return;
+
+      if (e.key === "Enter") {
+        if (barcodeBuffer.current.length >= 3) {
+          const skuScanned = barcodeBuffer.current.trim();
+
+          const foundProduct = products.find(p => p.sku && p.sku.trim() !== "" && p.sku.trim().toLowerCase() === skuScanned.toLowerCase());
+
+          if (foundProduct) {
+            addToCart(foundProduct);
+            // Xóa thanh tìm kiếm nếu con trỏ đang nằm trong ô tìm kiếm
+            setPosSearch("");
+          } else {
+            showAlert(`Không tìm thấy sản phẩm với mã vạch: ${skuScanned}`, "Lỗi quét mã", "error");
+          }
+
+          if (e.target instanceof HTMLInputElement) {
+            e.preventDefault();
+          }
+        }
+        barcodeBuffer.current = "";
+        return;
+      }
+
+      barcodeBuffer.current += e.key;
+
+      if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
+      barcodeTimeout.current = setTimeout(() => {
+        barcodeBuffer.current = ""; // Nếu gõ phím bình thường (chậm) thì tự reset buffer
+      }, 50); // Scanner thường gõ cực nhanh (< 20ms)
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeTab, products, isSystemModalOpen, isCustomerModalOpen, isCheckoutModalOpen, isLabelPrintModalOpen, isPendingModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isUnitManagerOpen, showAlert]);
+
   // Memoized filtered lists — only recompute when dependencies change
   const posFilteredProducts = useMemo(() => {
     const lowerSearch = removeAccents(posSearchDebounced.toLowerCase());
@@ -1698,7 +1744,7 @@ function App() {
       }
 
       let newId = (Math.max(...products.map(p => Number(p.id) || 0)) + 1).toString();
-      
+
       const newProd: Product = {
         id: newId,
         sku: editForm.sku,
@@ -1967,7 +2013,7 @@ function App() {
         const checkUrl = `${gasUrl}?action=check&session=${iphoneSessionId}&token=${gasToken}&sku=${encodeURIComponent(targetSku)}`;
         const res = await fetch(checkUrl);
         const data = await res.json();
-        
+
         if (data.status === "success" && data.imageUrl) {
           // Update the preview link
           setImageEditLink(prevLink => {
@@ -2009,7 +2055,7 @@ function App() {
     };
     setPendingInvoices(prev => [...prev, newPending]);
     alert(`Đã tạm lưu hóa đơn ${invoiceNo} thành công!`);
-    
+
     // Reset POS
     setCart([]);
     setInvoiceNo("HĐ-" + Math.floor(10000 + Math.random() * 90000));
@@ -2029,7 +2075,7 @@ function App() {
           price: item.product.price,
           discount: item.discount || 0
         }));
-        
+
         await tauriInvoke("save_invoice_db", {
           server: mssqlServer,
           dbName: mssqlDbName,
@@ -2058,7 +2104,7 @@ function App() {
       alert("Không thể ghi nợ cho Khách lẻ. Vui lòng chọn khách hàng cụ thể hoặc thêm khách hàng mới!");
       return;
     }
-    
+
     // Save invoice to CSDL first!
     try {
       await handleSaveSaleToDB();
@@ -2068,7 +2114,7 @@ function App() {
 
     const totalToPay = getCartFinalTotal();
     const newDebt = selectedCustomer.debt + totalToPay;
-    
+
     const today = new Date();
     const month = today.getMonth() + 1;
     const year = today.getFullYear();
@@ -2099,7 +2145,7 @@ function App() {
     setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, debt: newDebt } : c));
     setSelectedCustomer(prev => ({ ...prev, debt: newDebt }));
     alert(`Hóa đơn ${invoiceNo} bán nợ thành công cho ${selectedCustomer.name}.\nSố tiền ghi nợ: ${formatVND(totalToPay)}đ.\nCông nợ: ${formatVND(newDebt)}đ.`);
-    
+
     resetPOSAfterSale();
   };
 
@@ -2163,7 +2209,7 @@ function App() {
           <span style={{ display: 'inline-block', animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
           {isRefreshing ? 'Đang tải...' : 'Làm mới (F5)'}
         </div>
-        
+
         {activeTab === "pos" && (
           <>
             <div className="menu-item" onClick={handleSaveTemporary} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2206,8 +2252,8 @@ function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, position: 'relative' }}>
                   <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Khách hàng:</span>
                   <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-                    <input 
-                      className="classic-input" 
+                    <input
+                      className="classic-input"
                       style={{ flex: 1, minWidth: '100px', paddingRight: '16px' }}
                       value={customerSearchQuery}
                       onFocus={(e) => {
@@ -2227,12 +2273,12 @@ function App() {
                       }}
                       placeholder="Tìm khách hàng..."
                     />
-                    <span style={{ 
-                      position: 'absolute', 
-                      right: '4px', 
-                      pointerEvents: 'none', 
-                      fontSize: '8px', 
-                      color: '#555' 
+                    <span style={{
+                      position: 'absolute',
+                      right: '4px',
+                      pointerEvents: 'none',
+                      fontSize: '8px',
+                      color: '#555'
                     }}>▼</span>
                     {isCustomerDropdownOpen && (
                       <div className="classic-dropdown-list" style={{
@@ -2251,9 +2297,9 @@ function App() {
                           const query = removeAccents(customerSearchQuery.toLowerCase());
                           return removeAccents(c.name.toLowerCase()).includes(query) || c.phone.includes(query);
                         }).map(c => (
-                          <div 
-                            key={c.id} 
-                            className="dropdown-item" 
+                          <div
+                            key={c.id}
+                            className="dropdown-item"
                             style={{
                               padding: '4px 6px',
                               cursor: 'pointer',
@@ -2282,12 +2328,12 @@ function App() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 2 }}>
                   <span style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Ghi chú:</span>
-                  <input 
-                    className="classic-input" 
+                  <input
+                    className="classic-input"
                     value={posNotes}
                     onChange={e => setPosNotes(e.target.value)}
-                    onFocus={(e) => e.target.select()} 
-                    style={{ flex: 1, minWidth: '180px' }} 
+                    onFocus={(e) => e.target.select()}
+                    style={{ flex: 1, minWidth: '180px' }}
                   />
                 </div>
               </fieldset>
@@ -2461,6 +2507,25 @@ function App() {
                 >
                   Tìm
                 </button>
+                <button
+                  className="classic-btn"
+                  style={{ marginLeft: '4px', backgroundColor: '#e6f3ff', borderColor: '#b3d7ff' }}
+                  onClick={() => {
+                    const testSku = prompt("Nhập mã vạch để giả lập máy quét (VD: 12345678):");
+                    if (testSku) {
+                      const foundProduct = products.find(p => p.sku && p.sku.trim() !== "" && p.sku.trim().toLowerCase() === testSku.trim().toLowerCase());
+                      if (foundProduct) {
+                        addToCart(foundProduct);
+                        setPosSearch("");
+                      } else {
+                        showAlert(`Không tìm thấy sản phẩm với mã vạch: ${testSku}`, "Lỗi quét mã", "error");
+                      }
+                    }
+                  }}
+                  title="Kiểm tra chức năng bắn mã vạch"
+                >
+                  Test Scan
+                </button>
                 <div style={{ flex: 1 }}></div>
                 <span style={{ fontSize: '11px', color: 'var(--text-blue)', marginRight: '10px', fontWeight: 'bold' }}>
                   Đã hiển thị: {Math.min(posLimit, posFilteredProducts.length)}/{posFilteredProducts.length} mặt hàng
@@ -2468,8 +2533,8 @@ function App() {
               </div>
               <div style={{ display: 'flex', flex: 1, padding: '0 4px 4px 4px', minHeight: 0 }}>
                 {/* Search List Grid */}
-                <div 
-                  className="grid-container" 
+                <div
+                  className="grid-container"
                   style={{ flex: 1, margin: '0 4px 0 0' }}
                   onScroll={e => {
                     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -2520,7 +2585,7 @@ function App() {
                               textDecoration: 'line-through'
                             }}
                           >
-                             <td>{p.sku}</td>
+                            <td>{p.sku}</td>
                             <td>{p.name}</td>
                             <td>{p.unit}</td>
                             <td className="text-right">{formatVND(p.price)}</td>
@@ -2532,23 +2597,52 @@ function App() {
                   </table>
                 </div>
                 {/* Product Image Panel */}
-                <div 
-                  className="pos-image-panel" 
+                <div
+                  className="pos-image-panel"
                   onWheel={handleImagePanelWheel}
-                  style={{ 
-                    margin: 0, 
-                    width: `${posImageWidth}px`, 
-                    minWidth: `${posImageWidth}px`, 
-                    maxWidth: `${posImageWidth}px`, 
-                    height: '100%', 
+                  style={{
+                    margin: 0,
+                    width: `${posImageWidth}px`,
+                    minWidth: `${posImageWidth}px`,
+                    maxWidth: `${posImageWidth}px`,
+                    height: '100%',
                     flexDirection: 'column',
                     cursor: 'ew-resize'
                   }}
                   title="Cuộn chuột (Scroll) trên đây để đổi độ rộng"
                 >
                   <div style={{ flex: 1, width: '100%', overflow: 'hidden', padding: '4px' }}>
-                    {selectedProduct?.link ? (
-                      <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />
+                    {selectedProduct ? (
+                      selectedProduct.link ? (
+                        <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                          <div className="default-image-placeholder" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <line x1="10" y1="10" x2="90" y2="90" stroke="red" strokeWidth="2" />
+                              <line x1="90" y1="10" x2="10" y2="90" stroke="red" strokeWidth="2" />
+                            </svg>
+                          </div>
+                          <button
+                            className="classic-btn"
+                            style={{
+                              position: 'relative',
+                              zIndex: 10,
+                              padding: '4px 8px',
+                              backgroundColor: '#e6f3ff',
+                              borderColor: '#b3d7ff',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}
+                            onClick={() => {
+                              setImageEditProduct(selectedProduct);
+                              setImageEditLink("");
+                            }}
+                            title="Thêm ảnh cho sản phẩm này"
+                          >
+                            📷 Chụp ảnh
+                          </button>
+                        </div>
+                      )
                     ) : (
                       <div className="default-image-placeholder">
                         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -2570,12 +2664,12 @@ function App() {
         {activeTab === "inventory" && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Hidden Input for CSV Import */}
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              accept=".csv" 
-              onChange={handleImportCSV} 
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".csv"
+              onChange={handleImportCSV}
             />
 
             {/* Inventory Toolbar */}
@@ -2600,8 +2694,8 @@ function App() {
 
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Trạng thái:</span>
-                <select 
-                  className="classic-input" 
+                <select
+                  className="classic-input"
                   style={{ width: '110px' }}
                   value={inventoryAvailableFilter}
                   onChange={e => setInventoryAvailableFilter(e.target.value)}
@@ -2623,12 +2717,12 @@ function App() {
                   ))}
                 </select>
                 <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Tìm (Esc):</span>
-                <input 
+                <input
                   ref={inventorySearchRef}
-                  className="classic-input" 
-                  style={{ width: '150px', backgroundColor: '#ffe4e1' }} 
-                  value={inventorySearch} 
-                  onChange={e => setInventorySearch(e.target.value)} 
+                  className="classic-input"
+                  style={{ width: '150px', backgroundColor: '#ffe4e1' }}
+                  value={inventorySearch}
+                  onChange={e => setInventorySearch(e.target.value)}
                   placeholder="Mã hoặc tên..."
                   onFocus={(e) => e.target.select()}
                   onKeyDown={e => {
@@ -2660,8 +2754,8 @@ function App() {
 
             {/* Main Inventory Layout with optional Batch Capture Sidebar */}
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden', margin: '4px' }}>
-              <div 
-                className="grid-container" 
+              <div
+                className="grid-container"
                 style={{ flex: 1, margin: 0 }}
                 onMouseDown={e => {
                   if ((e.target as HTMLElement).tagName === 'TD' || (e.target as HTMLElement).tagName === 'TR') return;
@@ -2675,233 +2769,233 @@ function App() {
                   }
                 }}
               >
-              <table className="data-grid">
-                <thead>
-                  <tr>
-                    <th style={{ width: '10%' }}>Hình ảnh</th>
-                    <th style={{ width: '15%' }}>Mã hàng</th>
-                    <th style={{ width: '30%' }}>Tên M.Hàng</th>
-                    <th style={{ width: '8%' }}>ĐVT</th>
-                    <th style={{ width: '12%' }}>Đơn giá</th>
-                    <th style={{ width: '10%' }}>Đ.giá 2</th>
-                    <th style={{ width: '7%' }}>Còn bán</th>
-                    <th style={{ width: '8%' }}>Kho</th>
-                    <th style={{ width: '6%', textAlign: 'center' }}>In tem</th>
-                    <th style={{ width: '5%', textAlign: 'center' }}>Xóa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryFilteredProducts.slice(0, inventoryLimit).map((p) => {
-                    const isSelected = selectedProduct?.id === p.id;
-                    return (
-                      <tr 
-                        key={p.id}
-                        data-product-row="true"
-                        className={isSelected ? "selected-row" : ""}
-                        onClick={() => setSelectedProduct(p)}
-                        style={{ 
-                          cursor: 'pointer',
-                          color: isSelected ? undefined : (p.available === false ? '#777' : undefined),
-                          backgroundColor: isSelected ? undefined : (p.available === false ? '#f2f2f2' : undefined)
-                        }}
-                      >
-                        {isSelected ? (
-                          <>
-                            <td 
-                              className="text-center" 
-                              style={{ padding: '2px', cursor: 'pointer' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedProduct(p);
-                                setImageEditProduct(p);
-                                setImageEditLink(p.link || "");
-                              }}
-                              title="Click để sửa hình ảnh"
-                            >
-                              {p.link ? (
-                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #0056b3' }} onError={handleImageError} />
-                              ) : (
-                                <span style={{ color: '#0056b3', fontSize: '10px', textDecoration: 'underline' }}>[Sửa ảnh]</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
-                                value={p.sku}
-                                onChange={e => updateProductField(p.id, 'sku', e.target.value)}
-                                onBlur={e => updateProductField(p.id, 'sku', e.target.value, true)}
-                                onClick={e => e.stopPropagation()}
-                              />
-                            </td>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
-                                value={p.name}
-                                onChange={e => updateProductField(p.id, 'name', e.target.value)}
-                                onBlur={e => updateProductField(p.id, 'name', e.target.value, true)}
-                                onClick={e => e.stopPropagation()}
-                              />
-                            </td>
-                            <td style={{ padding: '1px' }}>
-                              <select
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 2px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
-                                value={p.unit}
-                                onChange={e => updateProductField(p.id, 'unit', e.target.value, true)}
-                                onClick={e => e.stopPropagation()}
+                <table className="data-grid">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '10%' }}>Hình ảnh</th>
+                      <th style={{ width: '15%' }}>Mã hàng</th>
+                      <th style={{ width: '30%' }}>Tên M.Hàng</th>
+                      <th style={{ width: '8%' }}>ĐVT</th>
+                      <th style={{ width: '12%' }}>Đơn giá</th>
+                      <th style={{ width: '10%' }}>Đ.giá 2</th>
+                      <th style={{ width: '7%' }}>Còn bán</th>
+                      <th style={{ width: '8%' }}>Kho</th>
+                      <th style={{ width: '6%', textAlign: 'center' }}>In tem</th>
+                      <th style={{ width: '5%', textAlign: 'center' }}>Xóa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryFilteredProducts.slice(0, inventoryLimit).map((p) => {
+                      const isSelected = selectedProduct?.id === p.id;
+                      return (
+                        <tr
+                          key={p.id}
+                          data-product-row="true"
+                          className={isSelected ? "selected-row" : ""}
+                          onClick={() => setSelectedProduct(p)}
+                          style={{
+                            cursor: 'pointer',
+                            color: isSelected ? undefined : (p.available === false ? '#777' : undefined),
+                            backgroundColor: isSelected ? undefined : (p.available === false ? '#f2f2f2' : undefined)
+                          }}
+                        >
+                          {isSelected ? (
+                            <>
+                              <td
+                                className="text-center"
+                                style={{ padding: '2px', cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProduct(p);
+                                  setImageEditProduct(p);
+                                  setImageEditLink(p.link || "");
+                                }}
+                                title="Click để sửa hình ảnh"
                               >
-                                {units.map(u => (
-                                  <option key={u} value={u}>{u}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                type="number"
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
-                                value={p.price}
-                                onChange={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateProductField(p.id, 'price', val);
-                                  }
+                                {p.link ? (
+                                  <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #0056b3' }} onError={handleImageError} />
+                                ) : (
+                                  <span style={{ color: '#0056b3', fontSize: '10px', textDecoration: 'underline' }}>[Sửa ảnh]</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '1px' }}>
+                                <input
+                                  className="classic-input"
+                                  style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                  value={p.sku}
+                                  onChange={e => updateProductField(p.id, 'sku', e.target.value)}
+                                  onBlur={e => updateProductField(p.id, 'sku', e.target.value, true)}
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </td>
+                              <td style={{ padding: '1px' }}>
+                                <input
+                                  className="classic-input"
+                                  style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                  value={p.name}
+                                  onChange={e => updateProductField(p.id, 'name', e.target.value)}
+                                  onBlur={e => updateProductField(p.id, 'name', e.target.value, true)}
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </td>
+                              <td style={{ padding: '1px' }}>
+                                <select
+                                  className="classic-input"
+                                  style={{ width: '100%', height: '22px', padding: '0 2px', margin: 0, border: '1px solid var(--border-dark)', background: '#fff', color: '#000' }}
+                                  value={p.unit}
+                                  onChange={e => updateProductField(p.id, 'unit', e.target.value, true)}
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  {units.map(u => (
+                                    <option key={u} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td style={{ padding: '1px' }}>
+                                <input
+                                  type="number"
+                                  className="classic-input"
+                                  style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                                  value={p.price}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    if (val >= 0) {
+                                      updateProductField(p.id, 'price', val);
+                                    }
+                                  }}
+                                  onBlur={e => {
+                                    const val = Number(e.target.value);
+                                    if (val >= 0) {
+                                      updateProductField(p.id, 'price', val, true);
+                                    }
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </td>
+                              <td style={{ padding: '1px' }}>
+                                <input
+                                  type="number"
+                                  className="classic-input"
+                                  style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                                  value={p.price2 || 0}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    if (val >= 0) {
+                                      updateProductField(p.id, 'price2', val);
+                                    }
+                                  }}
+                                  onBlur={e => {
+                                    const val = Number(e.target.value);
+                                    if (val >= 0) {
+                                      updateProductField(p.id, 'price2', val, true);
+                                    }
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td
+                                className="text-center"
+                                style={{ padding: '2px', cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProduct(p);
+                                  setImageEditProduct(p);
+                                  setImageEditLink(p.link || "");
                                 }}
-                                onBlur={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateProductField(p.id, 'price', val, true);
-                                  }
-                                }}
-                                onClick={e => e.stopPropagation()}
-                              />
-                            </td>
-                            <td style={{ padding: '1px' }}>
-                              <input
-                                type="number"
-                                className="classic-input"
-                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
-                                value={p.price2 || 0}
-                                onChange={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateProductField(p.id, 'price2', val);
-                                  }
-                                }}
-                                onBlur={e => {
-                                  const val = Number(e.target.value);
-                                  if (val >= 0) {
-                                    updateProductField(p.id, 'price2', val, true);
-                                  }
-                                }}
-                                onClick={e => e.stopPropagation()}
-                              />
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td 
-                              className="text-center" 
-                              style={{ padding: '2px', cursor: 'pointer' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedProduct(p);
-                                setImageEditProduct(p);
-                                setImageEditLink(p.link || "");
-                              }}
-                              title="Click để sửa hình ảnh"
-                            >
-                              {p.link ? (
-                                <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} onError={handleImageError} />
-                              ) : (
-                                <span style={{ color: '#808080', fontSize: '10px' }}>[Không ảnh]</span>
-                              )}
-                            </td>
-                            <td>{p.sku}</td>
-                            <td>{p.name}</td>
-                            <td>{p.unit}</td>
-                            <td className="text-right">{formatVND(p.price)}</td>
-                            <td className="text-right">{formatVND(p.price2 || 0)}</td>
-                          </>
-                        )}
-                        <td className="text-center" style={{ padding: '2px' }}>
-                          <input
-                            type="checkbox"
-                            style={{ cursor: 'pointer' }}
-                            checked={p.available !== false}
-                            onChange={e => updateProductField(p.id, 'available', e.target.checked, true)}
-                            onClick={e => e.stopPropagation()}
-                          />
-                        </td>
-                        {isSelected ? (
-                          <td style={{ padding: '1px' }}>
+                                title="Click để sửa hình ảnh"
+                              >
+                                {p.link ? (
+                                  <img src={p.link} alt={p.name} style={{ height: '20px', width: '20px', objectFit: 'contain', border: '1px solid #808080' }} onError={handleImageError} />
+                                ) : (
+                                  <span style={{ color: '#808080', fontSize: '10px' }}>[Không ảnh]</span>
+                                )}
+                              </td>
+                              <td>{p.sku}</td>
+                              <td>{p.name}</td>
+                              <td>{p.unit}</td>
+                              <td className="text-right">{formatVND(p.price)}</td>
+                              <td className="text-right">{formatVND(p.price2 || 0)}</td>
+                            </>
+                          )}
+                          <td className="text-center" style={{ padding: '2px' }}>
                             <input
-                              type="number"
-                              className="classic-input"
-                              style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
-                              value={p.stock}
-                              onChange={e => {
-                                const val = Number(e.target.value);
-                                if (val >= 0) {
-                                  updateProductField(p.id, 'stock', val);
-                                }
-                              }}
-                              onBlur={e => {
-                                const val = Number(e.target.value);
-                                if (val >= 0) {
-                                  updateProductField(p.id, 'stock', val, true);
-                                }
-                              }}
+                              type="checkbox"
+                              style={{ cursor: 'pointer' }}
+                              checked={p.available !== false}
+                              onChange={e => updateProductField(p.id, 'available', e.target.checked, true)}
                               onClick={e => e.stopPropagation()}
                             />
                           </td>
-                        ) : (
-                          <td className="text-right">{p.stock}</td>
-                        )}
-                        <td className="text-center" style={{ padding: '2px 0' }}>
-                          <button
-                            className="classic-btn"
-                            style={{ padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setLabelPrintProduct(p);
-                              setLabelPrintQuantity(2);
-                              setIsLabelPrintModalOpen(true);
-                            }}
-                            title="In tem nhãn cho mặt hàng này"
-                          >
-                            🖨️ In
-                          </button>
-                        </td>
-                        <td className="text-center" style={{ padding: '2px 0' }}>
-                          <button
-                            className="classic-btn"
-                            style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setProductToDelete(p);
-                            }}
-                          >
-                            Xóa
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          {isSelected ? (
+                            <td style={{ padding: '1px' }}>
+                              <input
+                                type="number"
+                                className="classic-input"
+                                style={{ width: '100%', height: '22px', padding: '0 4px', margin: 0, border: '1px solid var(--border-dark)', textAlign: 'right', background: '#fff', color: '#000' }}
+                                value={p.stock}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'stock', val);
+                                  }
+                                }}
+                                onBlur={e => {
+                                  const val = Number(e.target.value);
+                                  if (val >= 0) {
+                                    updateProductField(p.id, 'stock', val, true);
+                                  }
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                          ) : (
+                            <td className="text-right">{p.stock}</td>
+                          )}
+                          <td className="text-center" style={{ padding: '2px 0' }}>
+                            <button
+                              className="classic-btn"
+                              style={{ padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLabelPrintProduct(p);
+                                setLabelPrintQuantity(2);
+                                setIsLabelPrintModalOpen(true);
+                              }}
+                              title="In tem nhãn cho mặt hàng này"
+                            >
+                              🖨️ In
+                            </button>
+                          </td>
+                          <td className="text-center" style={{ padding: '2px 0' }}>
+                            <button
+                              className="classic-btn"
+                              style={{ color: 'red', padding: '2px 6px', fontSize: '10px', minWidth: '40px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProductToDelete(p);
+                              }}
+                            >
+                              Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+
             </div>
 
-
+            <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
+              Đã hiển thị: {Math.min(inventoryLimit, inventoryFilteredProducts.length)}/{inventoryFilteredProducts.length} mặt hàng (Tổng số mặt hàng: {products.length})
+            </div>
           </div>
-
-          <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
-            Đã hiển thị: {Math.min(inventoryLimit, inventoryFilteredProducts.length)}/{inventoryFilteredProducts.length} mặt hàng (Tổng số mặt hàng: {products.length})
-          </div>
-        </div>
-      )}
+        )}
 
         {activeTab === "customers" && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2912,7 +3006,7 @@ function App() {
                 setCustomerForm({ name: "", phone: "", address: "", debt: 0 });
                 setIsCustomerModalOpen(true);
               }}><span className="tool-icon">➕</span>Thêm KH</button>
-              
+
 
 
               <button className="tool-btn" onClick={() => {
@@ -2949,12 +3043,12 @@ function App() {
 
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: '10px', gap: '4px' }}>
                 <span>Tìm kiếm (Esc):</span>
-                <input 
+                <input
                   ref={customerSearchRef}
-                  className="classic-input" 
-                  style={{ width: '150px' }} 
-                  value={customerSearch} 
-                  onChange={e => setCustomerSearch(e.target.value)} 
+                  className="classic-input"
+                  style={{ width: '150px' }}
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
                   placeholder="Tên hoặc SĐT..."
                   onFocus={(e) => e.target.select()}
                   onKeyDown={e => {
@@ -2975,8 +3069,8 @@ function App() {
             </div>
 
             {/* Customer Data Grid */}
-            <div 
-              className="grid-container" 
+            <div
+              className="grid-container"
               style={{ margin: '4px', flex: 1, overflowY: 'auto' }}
               onMouseDown={e => {
                 // Deselect if clicking the container background (not a row)
@@ -3007,8 +3101,8 @@ function App() {
                     const globalIdx = customers.findIndex(cust => cust.id === c.id);
                     const isSelected = selectedCustomerIdx === globalIdx && c.id !== '1';
                     return (
-                      <tr 
-                        key={c.id} 
+                      <tr
+                        key={c.id}
                         data-customer-row="true"
                         className={selectedCustomerIdx === globalIdx ? "selected-row" : ""}
                         onClick={() => setSelectedCustomerIdx(globalIdx)}
@@ -3100,7 +3194,7 @@ function App() {
                 </tbody>
               </table>
             </div>
-            
+
             <div style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--text-blue)' }}>
               Đã hiển thị: {Math.min(customerLimit, filteredCustomers.length)}/{filteredCustomers.length} khách hàng (Tổng số khách hàng: {customers.length})
             </div>
@@ -3287,28 +3381,28 @@ function App() {
             <div className="dialog-body">
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Mã hàng:</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={editForm.sku} 
-                  onChange={e => setEditForm({ ...editForm, sku: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={editForm.sku}
+                  onChange={e => setEditForm({ ...editForm, sku: e.target.value })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Tên mặt hàng:</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={editForm.name} 
-                  onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>ĐVT:</span>
-                <select 
-                  className="classic-input" 
+                <select
+                  className="classic-input"
                   style={{ flex: 1 }}
                   value={editForm.unit}
                   onChange={e => setEditForm({ ...editForm, unit: e.target.value })}
@@ -3320,7 +3414,7 @@ function App() {
                     <option value={editForm.unit}>{editForm.unit}</option>
                   ) : null}
                 </select>
-                <button 
+                <button
                   className="classic-btn"
                   style={{ marginLeft: '4px', padding: '0 6px', height: '21px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={() => {
@@ -3341,47 +3435,47 @@ function App() {
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Hình ảnh (URL):</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={editForm.link || ""} 
-                  onChange={e => setEditForm({ ...editForm, link: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={editForm.link || ""}
+                  onChange={e => setEditForm({ ...editForm, link: e.target.value })}
                   onFocus={(e) => e.target.select()}
                   placeholder="Nhập link hình ảnh..."
                 />
               </div>
               <div className="form-row" style={{ display: 'flex', alignItems: 'center' }}>
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Còn bán:</span>
-                <input 
+                <input
                   type="checkbox"
                   style={{ cursor: 'pointer', margin: 0 }}
-                  checked={editForm.available !== false} 
-                  onChange={e => setEditForm({ ...editForm, available: e.target.checked })} 
+                  checked={editForm.available !== false}
+                  onChange={e => setEditForm({ ...editForm, available: e.target.checked })}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Đơn giá:</span>
-                <input 
-                  type="number" 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={editForm.price} 
-                  onChange={e => setEditForm({ ...editForm, price: Math.max(0, Number(e.target.value)) })} 
+                <input
+                  type="number"
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={editForm.price}
+                  onChange={e => setEditForm({ ...editForm, price: Math.max(0, Number(e.target.value)) })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Đơn giá 2:</span>
-                <input 
-                  type="number" 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={editForm.price2 || 0} 
-                  onChange={e => setEditForm({ ...editForm, price2: Math.max(0, Number(e.target.value)) })} 
+                <input
+                  type="number"
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={editForm.price2 || 0}
+                  onChange={e => setEditForm({ ...editForm, price2: Math.max(0, Number(e.target.value)) })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
-              
+
               <div className="dialog-buttons">
                 <button className="classic-btn" onClick={handleSaveProductEdit}>Lưu</button>
                 <button className="classic-btn" onClick={() => setEditingProduct(null)}>Hủy bỏ</button>
@@ -3400,419 +3494,419 @@ function App() {
             </div>
             <div className="dialog-body" style={{ padding: '0' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border-dark)', backgroundColor: '#e0dfdf' }}>
-                <div 
+                <div
                   style={{ padding: '6px 12px', cursor: 'pointer', borderRight: '1px solid var(--border-dark)', backgroundColor: settingsTab === 'general' ? '#fff' : 'transparent', fontWeight: settingsTab === 'general' ? 'bold' : 'normal', borderBottom: settingsTab === 'general' ? '1px solid #fff' : 'none', marginBottom: settingsTab === 'general' ? '-1px' : '0', fontSize: '12px' }}
                   onClick={() => setSettingsTab('general')}
                 >
                   Cấu hình chung
                 </div>
-                <div 
+                <div
                   style={{ padding: '6px 12px', cursor: 'pointer', borderRight: '1px solid var(--border-dark)', backgroundColor: settingsTab === 'advanced' ? '#fff' : 'transparent', fontWeight: settingsTab === 'advanced' ? 'bold' : 'normal', borderBottom: settingsTab === 'advanced' ? '1px solid #fff' : 'none', marginBottom: settingsTab === 'advanced' ? '-1px' : '0', fontSize: '12px' }}
                   onClick={() => setSettingsTab('advanced')}
                 >
                   Nâng cao
                 </div>
               </div>
-              
+
               <div style={{ padding: '10px' }}>
                 {settingsTab === 'general' && (
                   <>
-              {/* Lưu trữ & Cấu hình File */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Đường dẫn Cấu hình</legend>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: '#f0f0f0', fontSize: '10px' }} 
-                    value={configFilePath} 
-                    readOnly 
-                  />
-                  <button 
-                    className="classic-btn" 
-                    style={{ minWidth: '85px', height: '22px' }}
-                    onClick={handleOpenConfigFolder}
-                    title="Mở thư mục chứa file cấu hình"
-                  >
-                    📁 Mở thư mục
-                  </button>
-                </div>
-              </fieldset>
-
-              {/* Hiển thị & Thu phóng */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Hiển thị & Thu phóng</legend>
-                <div style={{ fontSize: '11px', marginBottom: '2px' }}>Tỷ lệ thu phóng ứng dụng:</div>
-                <select 
-                  className="classic-input"
-                  style={{ width: '100%', height: '22px' }}
-                  value={tempZoom}
-                  onChange={e => setTempZoom(Number(e.target.value))}
-                >
-                  <option value={80}>80% (Nhỏ)</option>
-                  <option value={90}>90%</option>
-                  <option value={100}>100% (Mặc định)</option>
-                  <option value={110}>110%</option>
-                  <option value={120}>120%</option>
-                  <option value={130}>130%</option>
-                  <option value={140}>140%</option>
-                  <option value={150}>150% (Lớn)</option>
-                  <option value={175}>175%</option>
-                  <option value={200}>200% (Rất lớn)</option>
-                </select>
-              </fieldset>
-
-              {/* Thông tin Cửa hàng */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Thông tin Cửa hàng (In hóa đơn)</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên cửa hàng:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1 }} 
-                    value={shopName} 
-                    onChange={e => setShopName(e.target.value)} 
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Địa chỉ:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1 }} 
-                    value={shopAddress} 
-                    onChange={e => setShopAddress(e.target.value)} 
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Số điện thoại:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1 }} 
-                    value={shopPhone} 
-                    onChange={e => setShopPhone(e.target.value)} 
-                  />
-                </div>
-              </fieldset>
-              </>
-            )}
-
-            {settingsTab === 'advanced' && (
-              <>
-              {/* Cấu hình Chụp ảnh iPhone (Google Drive) */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Cấu hình Chụp ảnh iPhone (Google Drive)</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Google Script URL:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1 }} 
-                    value={gasUrl} 
-                    onChange={e => setGasUrl(e.target.value)} 
-                    placeholder="Dán Web App URL của Google Apps Script"
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Khóa bảo mật:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1 }} 
-                    value={gasToken} 
-                    onChange={e => setGasToken(e.target.value)} 
-                    placeholder="Mã bí mật xác thực kết nối điện thoại"
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Mã kết nối:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: '#f0f0f0' }} 
-                    value={iphoneSessionId} 
-                    readOnly
-                  />
-                  <button className="classic-btn" style={{ minWidth: '60px', height: '22px' }} onClick={() => {
-                    const newSess = `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-                    setIphoneSessionId(newSess);
-                  }} title="Tạo mã kết nối mới cho iPhone">
-                    Tạo mới
-                  </button>
-                </div>
-              </fieldset>
-
-              {/* Cấu hình Máy in Hóa đơn */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Cấu hình Máy in Hóa đơn</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in hóa đơn:</span>
-                  <select
-                    className="classic-input"
-                    style={{ flex: 1, height: '22px' }}
-                    value={printMethod}
-                    onChange={e => setPrintMethod(e.target.value)}
-                  >
-                    <option value="browser">In qua trình duyệt (OS Print)</option>
-                    <option value="network">In qua máy in mạng (TCP/IP)</option>
-                  </select>
-                </div>
-                {printMethod === "network" && (
-                  <>
-                    <div className="form-row">
-                      <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in mạng:</span>
-                      <input 
-                        className="classic-input" 
-                        style={{ flex: 1 }} 
-                        value={networkPrinterIp} 
-                        onChange={e => setNetworkPrinterIp(e.target.value)} 
-                        placeholder="Ví dụ: 192.168.1.100"
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
-                      <button 
-                        className="classic-btn" 
-                        style={{ flex: 1, height: '22px' }} 
-                        onClick={(e) => { e.preventDefault(); handleScanPrinters('receipt'); }}
-                        disabled={scanningTarget !== null}
-                      >
-                        {scanningTarget === 'receipt' ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
-                      </button>
-                      <button 
-                        className="classic-btn" 
-                        style={{ flex: 1, height: '22px' }} 
-                        onClick={(e) => { e.preventDefault(); handleTestPrintNetwork(); }}
-                      >
-                        🖨️ In thử (Test)
-                      </button>
-                    </div>
-                    {lastScanTarget === 'receipt' && scannedPrinters.length > 0 && scanningTarget === null && (
-                      <div style={{ 
-                        marginTop: '4px', 
-                        padding: '4px', 
-                        border: '1px dashed var(--border-dark)', 
-                        backgroundColor: '#f9f9f9',
-                        borderRadius: '2px',
-                        fontSize: '10px'
-                      }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn):</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                          {scannedPrinters.map(ip => (
-                            <button
-                              key={ip}
-                              className="classic-btn"
-                              style={{ 
-                                padding: '1px 6px', 
-                                fontSize: '10px', 
-                                minWidth: 'auto', 
-                                height: '18px',
-                                backgroundColor: networkPrinterIp === ip ? '#d1e7dd' : '#fff',
-                                borderColor: networkPrinterIp === ip ? '#a3cfbb' : '#ccc',
-                                color: '#000'
-                              }}
-                              onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); setScannedPrinters([]); }}
-                            >
-                              🖥️ {ip}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Lưu trữ & Cấu hình File */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Đường dẫn Cấu hình</legend>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: '#f0f0f0', fontSize: '10px' }}
+                          value={configFilePath}
+                          readOnly
+                        />
+                        <button
+                          className="classic-btn"
+                          style={{ minWidth: '85px', height: '22px' }}
+                          onClick={handleOpenConfigFolder}
+                          title="Mở thư mục chứa file cấu hình"
+                        >
+                          📁 Mở thư mục
+                        </button>
                       </div>
-                    )}
+                    </fieldset>
+
+                    {/* Hiển thị & Thu phóng */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Hiển thị & Thu phóng</legend>
+                      <div style={{ fontSize: '11px', marginBottom: '2px' }}>Tỷ lệ thu phóng ứng dụng:</div>
+                      <select
+                        className="classic-input"
+                        style={{ width: '100%', height: '22px' }}
+                        value={tempZoom}
+                        onChange={e => setTempZoom(Number(e.target.value))}
+                      >
+                        <option value={80}>80% (Nhỏ)</option>
+                        <option value={90}>90%</option>
+                        <option value={100}>100% (Mặc định)</option>
+                        <option value={110}>110%</option>
+                        <option value={120}>120%</option>
+                        <option value={130}>130%</option>
+                        <option value={140}>140%</option>
+                        <option value={150}>150% (Lớn)</option>
+                        <option value={175}>175%</option>
+                        <option value={200}>200% (Rất lớn)</option>
+                      </select>
+                    </fieldset>
+
+                    {/* Thông tin Cửa hàng */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Thông tin Cửa hàng (In hóa đơn)</legend>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên cửa hàng:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1 }}
+                          value={shopName}
+                          onChange={e => setShopName(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Địa chỉ:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1 }}
+                          value={shopAddress}
+                          onChange={e => setShopAddress(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Số điện thoại:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1 }}
+                          value={shopPhone}
+                          onChange={e => setShopPhone(e.target.value)}
+                        />
+                      </div>
+                    </fieldset>
                   </>
                 )}
-              </fieldset>
 
-              {/* Cấu hình Máy in Tem */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-                <legend>Cấu hình Máy in Tem</legend>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in tem:</span>
-                  <select
-                    className="classic-input"
-                    style={{ flex: 1, height: '22px' }}
-                    value={labelPrintMethod}
-                    onChange={e => setLabelPrintMethod(e.target.value)}
-                  >
-                    <option value="browser">Không sử dụng / Chưa có</option>
-                    <option value="network">In qua máy in mạng (TCP/IP)</option>
-                  </select>
-                </div>
-                {labelPrintMethod === "network" && (
+                {settingsTab === 'advanced' && (
                   <>
-                    <div className="form-row">
-                      <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in tem:</span>
-                      <input 
-                        className="classic-input" 
-                        style={{ flex: 1 }} 
-                        value={labelNetworkPrinterIp} 
-                        onChange={e => setLabelNetworkPrinterIp(e.target.value)} 
-                        placeholder="Ví dụ: 192.168.1.101"
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
-                      <button 
-                        className="classic-btn" 
-                        style={{ flex: 1, height: '22px' }} 
-                        onClick={(e) => { e.preventDefault(); handleScanPrinters('label'); }}
-                        disabled={scanningTarget !== null}
-                      >
-                        {scanningTarget === 'label' ? "⏳ Đang quét..." : "🔍 Dò tìm tự động"}
-                      </button>
-                      <button 
-                        className="classic-btn" 
-                        style={{ flex: 1, height: '22px' }} 
-                        onClick={(e) => { e.preventDefault(); handleTestPrintLabelNetwork(); }}
-                      >
-                        🖨️ In thử Tem
-                      </button>
-                    </div>
-                    {lastScanTarget === 'label' && scannedPrinters.length > 0 && scanningTarget === null && (
-                      <div style={{ 
-                        marginTop: '4px', 
-                        padding: '4px', 
-                        border: '1px dashed var(--border-dark)', 
-                        backgroundColor: '#f9f9f9',
-                        borderRadius: '2px',
-                        fontSize: '10px'
-                      }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn làm Máy in Tem):</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                          {scannedPrinters.map(ip => (
-                            <button
-                              key={ip}
-                              className="classic-btn"
-                              style={{ 
-                                padding: '1px 6px', 
-                                fontSize: '10px', 
-                                minWidth: 'auto', 
-                                height: '18px',
-                                backgroundColor: labelNetworkPrinterIp === ip ? '#d1e7dd' : '#fff',
-                                borderColor: labelNetworkPrinterIp === ip ? '#a3cfbb' : '#ccc',
-                                color: '#000'
-                              }}
-                              onClick={(e) => { e.preventDefault(); setLabelNetworkPrinterIp(ip); setScannedPrinters([]); }}
-                            >
-                              🖥️ {ip}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Cấu hình Chụp ảnh iPhone (Google Drive) */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Cấu hình Chụp ảnh iPhone (Google Drive)</legend>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '100px' }}>Google Script URL:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1 }}
+                          value={gasUrl}
+                          onChange={e => setGasUrl(e.target.value)}
+                          placeholder="Dán Web App URL của Google Apps Script"
+                        />
                       </div>
-                    )}
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '100px' }}>Khóa bảo mật:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1 }}
+                          value={gasToken}
+                          onChange={e => setGasToken(e.target.value)}
+                          placeholder="Mã bí mật xác thực kết nối điện thoại"
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '100px' }}>Mã kết nối:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: '#f0f0f0' }}
+                          value={iphoneSessionId}
+                          readOnly
+                        />
+                        <button className="classic-btn" style={{ minWidth: '60px', height: '22px' }} onClick={() => {
+                          const newSess = `sess_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                          setIphoneSessionId(newSess);
+                        }} title="Tạo mã kết nối mới cho iPhone">
+                          Tạo mới
+                        </button>
+                      </div>
+                    </fieldset>
+
+                    {/* Cấu hình Máy in Hóa đơn */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Cấu hình Máy in Hóa đơn</legend>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in hóa đơn:</span>
+                        <select
+                          className="classic-input"
+                          style={{ flex: 1, height: '22px' }}
+                          value={printMethod}
+                          onChange={e => setPrintMethod(e.target.value)}
+                        >
+                          <option value="browser">In qua trình duyệt (OS Print)</option>
+                          <option value="network">In qua máy in mạng (TCP/IP)</option>
+                        </select>
+                      </div>
+                      {printMethod === "network" && (
+                        <>
+                          <div className="form-row">
+                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in mạng:</span>
+                            <input
+                              className="classic-input"
+                              style={{ flex: 1 }}
+                              value={networkPrinterIp}
+                              onChange={e => setNetworkPrinterIp(e.target.value)}
+                              placeholder="Ví dụ: 192.168.1.100"
+                            />
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                            <button
+                              className="classic-btn"
+                              style={{ flex: 1, height: '22px' }}
+                              onClick={(e) => { e.preventDefault(); handleScanPrinters('receipt'); }}
+                              disabled={scanningTarget !== null}
+                            >
+                              {scanningTarget === 'receipt' ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
+                            </button>
+                            <button
+                              className="classic-btn"
+                              style={{ flex: 1, height: '22px' }}
+                              onClick={(e) => { e.preventDefault(); handleTestPrintNetwork(); }}
+                            >
+                              🖨️ In thử (Test)
+                            </button>
+                          </div>
+                          {lastScanTarget === 'receipt' && scannedPrinters.length > 0 && scanningTarget === null && (
+                            <div style={{
+                              marginTop: '4px',
+                              padding: '4px',
+                              border: '1px dashed var(--border-dark)',
+                              backgroundColor: '#f9f9f9',
+                              borderRadius: '2px',
+                              fontSize: '10px'
+                            }}>
+                              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn):</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {scannedPrinters.map(ip => (
+                                  <button
+                                    key={ip}
+                                    className="classic-btn"
+                                    style={{
+                                      padding: '1px 6px',
+                                      fontSize: '10px',
+                                      minWidth: 'auto',
+                                      height: '18px',
+                                      backgroundColor: networkPrinterIp === ip ? '#d1e7dd' : '#fff',
+                                      borderColor: networkPrinterIp === ip ? '#a3cfbb' : '#ccc',
+                                      color: '#000'
+                                    }}
+                                    onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); setScannedPrinters([]); }}
+                                  >
+                                    🖥️ {ip}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </fieldset>
+
+                    {/* Cấu hình Máy in Tem */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      <legend>Cấu hình Máy in Tem</legend>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '100px' }}>Kiểu in tem:</span>
+                        <select
+                          className="classic-input"
+                          style={{ flex: 1, height: '22px' }}
+                          value={labelPrintMethod}
+                          onChange={e => setLabelPrintMethod(e.target.value)}
+                        >
+                          <option value="browser">Không sử dụng / Chưa có</option>
+                          <option value="network">In qua máy in mạng (TCP/IP)</option>
+                        </select>
+                      </div>
+                      {labelPrintMethod === "network" && (
+                        <>
+                          <div className="form-row">
+                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in tem:</span>
+                            <input
+                              className="classic-input"
+                              style={{ flex: 1 }}
+                              value={labelNetworkPrinterIp}
+                              onChange={e => setLabelNetworkPrinterIp(e.target.value)}
+                              placeholder="Ví dụ: 192.168.1.101"
+                            />
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                            <button
+                              className="classic-btn"
+                              style={{ flex: 1, height: '22px' }}
+                              onClick={(e) => { e.preventDefault(); handleScanPrinters('label'); }}
+                              disabled={scanningTarget !== null}
+                            >
+                              {scanningTarget === 'label' ? "⏳ Đang quét..." : "🔍 Dò tìm tự động"}
+                            </button>
+                            <button
+                              className="classic-btn"
+                              style={{ flex: 1, height: '22px' }}
+                              onClick={(e) => { e.preventDefault(); handleTestPrintLabelNetwork(); }}
+                            >
+                              🖨️ In thử Tem
+                            </button>
+                          </div>
+                          {lastScanTarget === 'label' && scannedPrinters.length > 0 && scanningTarget === null && (
+                            <div style={{
+                              marginTop: '4px',
+                              padding: '4px',
+                              border: '1px dashed var(--border-dark)',
+                              backgroundColor: '#f9f9f9',
+                              borderRadius: '2px',
+                              fontSize: '10px'
+                            }}>
+                              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn làm Máy in Tem):</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {scannedPrinters.map(ip => (
+                                  <button
+                                    key={ip}
+                                    className="classic-btn"
+                                    style={{
+                                      padding: '1px 6px',
+                                      fontSize: '10px',
+                                      minWidth: 'auto',
+                                      height: '18px',
+                                      backgroundColor: labelNetworkPrinterIp === ip ? '#d1e7dd' : '#fff',
+                                      borderColor: labelNetworkPrinterIp === ip ? '#a3cfbb' : '#ccc',
+                                      color: '#000'
+                                    }}
+                                    onClick={(e) => { e.preventDefault(); setLabelNetworkPrinterIp(ip); setScannedPrinters([]); }}
+                                  >
+                                    🖥️ {ip}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </fieldset>
+
+                    {/* Kết nối MSSQL Database */}
+                    <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <legend style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '92%', margin: 0, padding: '0 4px' }}>
+                        <span style={{ fontWeight: 'bold' }}>Kết nối CSDL MSSQL</span>
+                        <button
+                          className="classic-btn"
+                          style={{
+                            height: '18px',
+                            lineHeight: '16px',
+                            padding: '0 6px',
+                            fontSize: '10px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            backgroundColor: dbLocked ? '#fff3cd' : '#d4edda',
+                            borderColor: dbLocked ? '#ffeeba' : '#c3e6cb',
+                            color: dbLocked ? '#856404' : '#155724',
+                            fontWeight: 'normal'
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setDbLocked(!dbLocked);
+                          }}
+                        >
+                          {dbLocked ? "🔓 Mở khóa" : "🔒 Khóa lại"}
+                        </button>
+                      </legend>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Server IP/Name:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }}
+                          value={mssqlServer}
+                          onChange={e => setMssqlServer(e.target.value)}
+                          placeholder="Ví dụ: localhost hoặc 192.168.1.10"
+                          disabled={dbLocked}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên Database:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }}
+                          value={mssqlDbName}
+                          onChange={e => setMssqlDbName(e.target.value)}
+                          disabled={dbLocked}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tài khoản:</span>
+                        <input
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }}
+                          value={mssqlUser}
+                          onChange={e => setMssqlUser(e.target.value)}
+                          disabled={dbLocked}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <span className="form-label-fixed" style={{ minWidth: '90px' }}>Mật khẩu:</span>
+                        <input
+                          type="password"
+                          className="classic-input"
+                          style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }}
+                          value={mssqlPass}
+                          onChange={e => setMssqlPass(e.target.value)}
+                          disabled={dbLocked}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
+                        <button
+                          className="classic-btn"
+                          style={{ minWidth: '120px' }}
+                          onClick={handleTestConnection}
+                          disabled={testingConnection}
+                        >
+                          {testingConnection ? "Đang kết nối..." : "🔌 Kiểm tra kết nối"}
+                        </button>
+
+                        <button
+                          className="classic-btn"
+                          style={{ minWidth: '90px', backgroundColor: '#e6f3ff', borderColor: '#b3d7ff' }}
+                          onClick={handleBackupDatabase}
+                          title="Sao lưu database hiện tại"
+                        >
+                          💾 Backup DB
+                        </button>
+
+                        <button
+                          className="classic-btn"
+                          style={{ minWidth: '90px', backgroundColor: '#fff0f5', borderColor: '#ffc0cb' }}
+                          onClick={handleFixInit}
+                          title="Kiểm tra và sửa cấu trúc bảng AnhMon (thêm cột URL)"
+                        >
+                          🛠️ Fix Init
+                        </button>
+
+                        {mssqlTestResult && (
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            color: mssqlTestResult.success ? '#006400' : '#8b0000',
+                            wordBreak: 'break-word',
+                            flex: '1 1 100%'
+                          }}>
+                            {mssqlTestResult.msg}
+                          </span>
+                        )}
+                      </div>
+                    </fieldset>
                   </>
                 )}
-              </fieldset>
-
-              {/* Kết nối MSSQL Database */}
-              <fieldset className="classic-fieldset" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <legend style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '92%', margin: 0, padding: '0 4px' }}>
-                  <span style={{ fontWeight: 'bold' }}>Kết nối CSDL MSSQL</span>
-                  <button 
-                    className="classic-btn" 
-                    style={{ 
-                      height: '18px', 
-                      lineHeight: '16px', 
-                      padding: '0 6px', 
-                      fontSize: '10px', 
-                      cursor: 'pointer',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '3px',
-                      backgroundColor: dbLocked ? '#fff3cd' : '#d4edda',
-                      borderColor: dbLocked ? '#ffeeba' : '#c3e6cb',
-                      color: dbLocked ? '#856404' : '#155724',
-                      fontWeight: 'normal'
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setDbLocked(!dbLocked);
-                    }}
-                  >
-                    {dbLocked ? "🔓 Mở khóa" : "🔒 Khóa lại"}
-                  </button>
-                </legend>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Server IP/Name:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
-                    value={mssqlServer} 
-                    onChange={e => setMssqlServer(e.target.value)} 
-                    placeholder="Ví dụ: localhost hoặc 192.168.1.10"
-                    disabled={dbLocked}
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tên Database:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
-                    value={mssqlDbName} 
-                    onChange={e => setMssqlDbName(e.target.value)} 
-                    disabled={dbLocked}
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Tài khoản:</span>
-                  <input 
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
-                    value={mssqlUser} 
-                    onChange={e => setMssqlUser(e.target.value)} 
-                    disabled={dbLocked}
-                  />
-                </div>
-                <div className="form-row">
-                  <span className="form-label-fixed" style={{ minWidth: '90px' }}>Mật khẩu:</span>
-                  <input 
-                    type="password"
-                    className="classic-input" 
-                    style={{ flex: 1, backgroundColor: dbLocked ? '#f5f5f5' : '#ffffff' }} 
-                    value={mssqlPass} 
-                    onChange={e => setMssqlPass(e.target.value)} 
-                    disabled={dbLocked}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-                  <button 
-                    className="classic-btn"
-                    style={{ minWidth: '120px' }}
-                    onClick={handleTestConnection}
-                    disabled={testingConnection}
-                  >
-                    {testingConnection ? "Đang kết nối..." : "🔌 Kiểm tra kết nối"}
-                  </button>
-
-                  <button 
-                    className="classic-btn"
-                    style={{ minWidth: '90px', backgroundColor: '#e6f3ff', borderColor: '#b3d7ff' }}
-                    onClick={handleBackupDatabase}
-                    title="Sao lưu database hiện tại"
-                  >
-                    💾 Backup DB
-                  </button>
-
-                  <button 
-                    className="classic-btn"
-                    style={{ minWidth: '90px', backgroundColor: '#fff0f5', borderColor: '#ffc0cb' }}
-                    onClick={handleFixInit}
-                    title="Kiểm tra và sửa cấu trúc bảng AnhMon (thêm cột URL)"
-                  >
-                    🛠️ Fix Init
-                  </button>
-
-                  {mssqlTestResult && (
-                    <span style={{ 
-                      fontSize: '11px', 
-                      fontWeight: 'bold', 
-                      color: mssqlTestResult.success ? '#006400' : '#8b0000',
-                      wordBreak: 'break-word',
-                      flex: '1 1 100%'
-                    }}>
-                      {mssqlTestResult.msg}
-                    </span>
-                  )}
-                </div>
-              </fieldset>
-              </>
-            )}
               </div>
-              
+
               <div className="dialog-buttons" style={{ marginTop: '12px' }}>
                 <button className="classic-btn" onClick={handleSaveSettings}>Lưu lại</button>
                 <button className="classic-btn" onClick={() => setIsSystemModalOpen(false)}>Hủy bỏ</button>
@@ -3832,28 +3926,28 @@ function App() {
             <div className="dialog-body">
               <div className="form-row">
                 <span className="form-label-fixed">Tên mặt hàng:</span>
-                <input 
-                  className="classic-input" 
-                  value={labelPrintProduct.name} 
-                  readOnly 
-                  style={{ flex: 1, backgroundColor: '#f5f5f5' }} 
+                <input
+                  className="classic-input"
+                  value={labelPrintProduct.name}
+                  readOnly
+                  style={{ flex: 1, backgroundColor: '#f5f5f5' }}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed">Đơn giá:</span>
-                <input 
-                  className="classic-input" 
-                  value={formatVND(labelPrintProduct.price) + " đ"} 
-                  readOnly 
-                  style={{ flex: 1, backgroundColor: '#f5f5f5', textAlign: 'right' }} 
+                <input
+                  className="classic-input"
+                  value={formatVND(labelPrintProduct.price) + " đ"}
+                  readOnly
+                  style={{ flex: 1, backgroundColor: '#f5f5f5', textAlign: 'right' }}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed">Số lượng tem:</span>
-                <input 
+                <input
                   type="number"
-                  className="classic-input" 
-                  value={labelPrintQuantity} 
+                  className="classic-input"
+                  value={labelPrintQuantity}
                   onChange={(e) => {
                     const val = parseInt(e.target.value);
                     if (!isNaN(val) && val > 0) setLabelPrintQuantity(val);
@@ -3867,7 +3961,7 @@ function App() {
                   min={2}
                   step={2}
                   max={100}
-                  style={{ flex: 1, textAlign: 'right' }} 
+                  style={{ flex: 1, textAlign: 'right' }}
                   autoFocus
                   onFocus={(e) => e.target.select()}
                 />
@@ -3875,12 +3969,12 @@ function App() {
 
               <div style={{ marginTop: '10px', marginBottom: '10px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '4px' }}>Mẫu in (Preview):</div>
-                <div style={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #ccc', 
-                  padding: '8px', 
-                  fontFamily: 'monospace', 
-                  fontSize: '12px', 
+                <div style={{
+                  backgroundColor: '#fff',
+                  border: '1px solid #ccc',
+                  padding: '8px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
                   whiteSpace: 'pre',
                   lineHeight: '1.2',
                   display: 'flex',
@@ -3891,10 +3985,10 @@ function App() {
                   {getLabelPreviewText(labelPrintProduct.name, labelPrintProduct.price, labelPrintProduct.sku).trim()}
                 </div>
               </div>
-              
+
               <div className="dialog-buttons" style={{ marginTop: '15px' }}>
-                <button 
-                  className="classic-btn" 
+                <button
+                  className="classic-btn"
                   onClick={() => {
                     let finalQty = labelPrintQuantity;
                     if (finalQty % 2 !== 0) finalQty += 1;
@@ -3984,53 +4078,53 @@ function App() {
             <div className="dialog-body">
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Họ tên:</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={customerForm.name} 
-                  onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={customerForm.name}
+                  onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Điện thoại:</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={customerForm.phone} 
-                  onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={customerForm.phone}
+                  onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Địa chỉ:</span>
-                <input 
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={customerForm.address} 
-                  onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} 
+                <input
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={customerForm.address}
+                  onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Công nợ đầu:</span>
-                <input 
+                <input
                   type="number"
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={customerForm.debt} 
-                  onChange={e => setCustomerForm({ ...customerForm, debt: Math.max(0, Number(e.target.value)) })} 
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={customerForm.debt}
+                  onChange={e => setCustomerForm({ ...customerForm, debt: Math.max(0, Number(e.target.value)) })}
                   onFocus={(e) => e.target.select()}
                   disabled={!!editingCustomer}
                 />
               </div>
               <div className="dialog-buttons">
-                 <button className="classic-btn" onClick={async () => {
+                <button className="classic-btn" onClick={async () => {
                   if (!customerForm.name.trim()) {
                     alert("Tên khách hàng không được để trống!");
                     return;
                   }
-                  
+
                   const today = new Date();
                   const month = today.getMonth() + 1;
                   const year = today.getFullYear();
@@ -4121,17 +4215,17 @@ function App() {
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Số tiền thêm nợ:</span>
-                <input 
+                <input
                   type="number"
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={addDebtAmount} 
-                  onChange={e => setAddDebtAmount(Math.max(0, Number(e.target.value)))} 
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={addDebtAmount}
+                  onChange={e => setAddDebtAmount(Math.max(0, Number(e.target.value)))}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="dialog-buttons">
-                 <button className="classic-btn" onClick={async () => {
+                <button className="classic-btn" onClick={async () => {
                   if (selectedCustomerIdx === null || !customers[selectedCustomerIdx]) return;
                   const cust = customers[selectedCustomerIdx];
                   if (addDebtAmount <= 0) {
@@ -4194,17 +4288,17 @@ function App() {
               </div>
               <div className="form-row">
                 <span className="form-label-fixed" style={{ minWidth: '85px' }}>Số tiền thu:</span>
-                <input 
+                <input
                   type="number"
-                  className="classic-input" 
-                  style={{ flex: 1 }} 
-                  value={payDebtAmount} 
-                  onChange={e => setPayDebtAmount(Math.max(0, Number(e.target.value)))} 
+                  className="classic-input"
+                  style={{ flex: 1 }}
+                  value={payDebtAmount}
+                  onChange={e => setPayDebtAmount(Math.max(0, Number(e.target.value)))}
                   onFocus={(e) => e.target.select()}
                 />
               </div>
               <div className="dialog-buttons">
-                 <button className="classic-btn" onClick={async () => {
+                <button className="classic-btn" onClick={async () => {
                   if (selectedCustomerIdx === null || !customers[selectedCustomerIdx]) return;
                   const cust = customers[selectedCustomerIdx];
                   if (payDebtAmount <= 0) {
@@ -4277,16 +4371,16 @@ function App() {
                   {shopName}
                 </div>
                 <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                  ĐC: {shopAddress}<br/>
+                  ĐC: {shopAddress}<br />
                   SĐT: {shopPhone}
                 </div>
-                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }} />
                 <div><strong>Số HĐ:</strong> {invoiceNo}</div>
                 <div><strong>Ngày:</strong> {invoiceDateTime ? `${getFormattedDate(invoiceDateTime)} ${getFormattedTime(invoiceDateTime)}` : `${getFormattedDate(currentDateTime)} ${getFormattedTime(currentDateTime)}`}</div>
                 <div><strong>Khách hàng:</strong> {selectedCustomer.name} {selectedCustomer.phone ? `(${selectedCustomer.phone})` : ''}</div>
                 {posNotes && <div><strong>Ghi chú:</strong> {posNotes}</div>}
-                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
-                
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }} />
+
                 <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #000', textAlign: 'left' }}>
@@ -4312,8 +4406,8 @@ function App() {
                     })}
                   </tbody>
                 </table>
-                
-                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Cộng tiền hàng:</span>
                   <span>{formatVND(getCartBaseTotal())}đ</span>
@@ -4328,12 +4422,12 @@ function App() {
                   <span>TỔNG CỘNG:</span>
                   <span>{formatVND(getCartFinalTotal())}đ</span>
                 </div>
-                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }}/>
+                <hr style={{ border: 'none', borderTop: '1px dashed #000', margin: '6px 0' }} />
                 <div style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '6px' }}>
                   Cảm ơn Quý khách. Hẹn gặp lại!
                 </div>
               </div>
-              
+
               <div className="dialog-buttons" style={{ marginTop: '8px' }}>
                 <button className="classic-btn" onClick={async () => {
                   try {
@@ -4367,7 +4461,7 @@ function App() {
                     }
                     resetPOSAfterSale();
                     alert("Đã gửi lệnh in hóa đơn thành công!");
-                  } catch (e) {}
+                  } catch (e) { }
                 }}>
                   🖨️ IN
                 </button>
@@ -4376,7 +4470,7 @@ function App() {
                     await handleSaveSaleToDB();
                     resetPOSAfterSale();
                     alert("Thanh toán thành công!");
-                  } catch (e) {}
+                  } catch (e) { }
                 }}>
                   ✔️ OK
                 </button>
@@ -4400,7 +4494,7 @@ function App() {
               {/* Form thêm ĐVT */}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' }}>Tên ĐVT mới:</span>
-                <input 
+                <input
                   className="classic-input"
                   style={{ flex: 1 }}
                   value={newUnitName}
@@ -4431,15 +4525,15 @@ function App() {
                       <tr key={u}>
                         <td style={{ fontWeight: 'bold' }}>{u}</td>
                         <td style={{ textAlign: 'center', display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button 
-                            className="classic-btn" 
+                          <button
+                            className="classic-btn"
                             style={{ padding: '2px 6px', fontSize: '10px', minWidth: 'auto' }}
                             onClick={() => handleRenameUnitInline(u)}
                           >
                             ✏️ Sửa
                           </button>
-                          <button 
-                            className="classic-btn" 
+                          <button
+                            className="classic-btn"
                             style={{ padding: '2px 6px', fontSize: '10px', minWidth: 'auto', color: 'red' }}
                             onClick={() => handleDeleteUnitInline(u)}
                           >
@@ -4451,7 +4545,7 @@ function App() {
                   </tbody>
                 </table>
               </div>
-              
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
                 <button className="classic-btn" onClick={() => setIsUnitManagerOpen(false)}>Đóng</button>
               </div>
@@ -4463,11 +4557,11 @@ function App() {
       {customAlert && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="classic-dialog" style={{ width: '320px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
-            <div 
-              className="dialog-title-bar" 
+            <div
+              className="dialog-title-bar"
               style={{
-                background: customAlert.type === 'error' 
-                  ? 'linear-gradient(90deg, #a00000, #ff5050)' 
+                background: customAlert.type === 'error'
+                  ? 'linear-gradient(90deg, #a00000, #ff5050)'
                   : customAlert.type === 'warning'
                     ? 'linear-gradient(90deg, #a08000, #ffd700)'
                     : 'linear-gradient(90deg, #000080, #1084d0)',
@@ -4487,9 +4581,9 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '70px', height: '23px', fontWeight: 'bold' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '70px', height: '23px', fontWeight: 'bold' }}
                   onClick={() => setCustomAlert(null)}
                   autoFocus
                 >
@@ -4504,8 +4598,8 @@ function App() {
       {customConfirm && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="classic-dialog" style={{ width: '320px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
-            <div 
-              className="dialog-title-bar" 
+            <div
+              className="dialog-title-bar"
               style={{
                 background: 'linear-gradient(90deg, #008080, #20b2aa)',
                 color: '#fff'
@@ -4522,9 +4616,9 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '75px', height: '23px', fontWeight: 'bold' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '75px', height: '23px', fontWeight: 'bold' }}
                   onClick={() => {
                     customConfirm.onConfirm();
                     setCustomConfirm(null);
@@ -4533,9 +4627,9 @@ function App() {
                 >
                   Đồng ý
                 </button>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '75px', height: '23px' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '75px', height: '23px' }}
                   onClick={() => setCustomConfirm(null)}
                 >
                   Hủy bỏ
@@ -4549,8 +4643,8 @@ function App() {
       {productToDelete && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="classic-dialog" style={{ width: '360px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
-            <div 
-              className="dialog-title-bar" 
+            <div
+              className="dialog-title-bar"
               style={{
                 background: 'linear-gradient(90deg, #a08000, #ffd700)',
                 color: '#fff'
@@ -4569,17 +4663,17 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '80px', height: '23px', fontWeight: 'bold', color: 'red' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '80px', height: '23px', fontWeight: 'bold', color: 'red' }}
                   onClick={handleConfirmDeleteProduct}
                   autoFocus
                 >
                   Xác nhận
                 </button>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '80px', height: '23px' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '80px', height: '23px' }}
                   onClick={() => setProductToDelete(null)}
                 >
                   Hủy bỏ
@@ -4593,8 +4687,8 @@ function App() {
       {imageEditProduct && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="classic-dialog" style={{ width: '600px', boxShadow: '3px 3px 15px rgba(0,0,0,0.3)' }}>
-            <div 
-              className="dialog-title-bar" 
+            <div
+              className="dialog-title-bar"
               style={{
                 background: 'linear-gradient(90deg, #000080, #1084d0)',
                 color: '#fff'
@@ -4613,21 +4707,21 @@ function App() {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* Image Preview Container */}
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <div style={{ 
-                      width: '100%', 
-                      height: '180px', 
-                      border: '2px inset #808080', 
-                      background: '#f0f0f0', 
-                      display: 'flex', 
-                      justifyContent: 'center', 
+                    <div style={{
+                      width: '100%',
+                      height: '180px',
+                      border: '2px inset #808080',
+                      background: '#f0f0f0',
+                      display: 'flex',
+                      justifyContent: 'center',
                       alignItems: 'center',
                       overflow: 'hidden'
                     }}>
                       {imageEditLink ? (
-                        <img 
-                          src={imageEditLink} 
-                          alt="Preview" 
-                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                        <img
+                          src={imageEditLink}
+                          alt="Preview"
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                           onError={handleImageError}
                         />
                       ) : (
@@ -4635,23 +4729,23 @@ function App() {
                       )}
                     </div>
                   </div>
-                  
+
                   {/* URL/Link Input */}
                   <div className="form-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
                     <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Đường dẫn hình ảnh (URL):</span>
-                    <textarea 
-                      className="classic-input" 
-                      style={{ width: '100%', height: '50px', padding: '4px', fontSize: '11px', resize: 'none' }} 
-                      value={imageEditLink} 
-                      onChange={e => setImageEditLink(e.target.value)} 
+                    <textarea
+                      className="classic-input"
+                      style={{ width: '100%', height: '50px', padding: '4px', fontSize: '11px', resize: 'none' }}
+                      value={imageEditLink}
+                      onChange={e => setImageEditLink(e.target.value)}
                       placeholder="Dán link hình ảnh tại đây..."
                     />
                   </div>
 
                   {imageEditLink && (
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <button 
-                        className="classic-btn" 
+                      <button
+                        className="classic-btn"
                         style={{ height: '24px', color: 'red', width: '100%' }}
                         onClick={() => {
                           if (imageEditLink) {
@@ -4675,19 +4769,19 @@ function App() {
                     <div style={{ fontWeight: 'bold', fontSize: '11px', color: 'var(--text-blue)', borderBottom: '1px solid #c0c0c0', paddingBottom: '4px', width: '100%', textAlign: 'center' }}>
                       📸 Đồng bộ Camera iPhone
                     </div>
-                    
+
                     {/* Large QR Code */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: '#fff', border: '1px solid #ccc', padding: '8px' }}>
-                      <img 
+                      <img
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
                           `${gasUrl}?session=${iphoneSessionId}&token=${gasToken}&sku=sync`
-                        )}`} 
-                        alt="QR Code" 
+                        )}`}
+                        alt="QR Code"
                         style={{ width: '140px', height: '140px' }}
                       />
                       <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', fontWeight: 'bold' }}>Quét mã để kết nối</div>
                     </div>
-                    
+
                     {/* Instructions & Status */}
                     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
                       <div style={{ fontSize: '11px', color: '#2e7d32', fontWeight: 'bold', textAlign: 'center' }}>
@@ -4705,18 +4799,18 @@ function App() {
                   </div>
                 </div>
               </div>
-              
+
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '8px', borderTop: '1px solid #c0c0c0', paddingTop: '8px' }}>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '85px', height: '23px', fontWeight: 'bold' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '85px', height: '23px', fontWeight: 'bold' }}
                   onClick={handleSaveProductImage}
                 >
                   Lưu
                 </button>
-                <button 
-                  className="classic-btn" 
-                  style={{ minWidth: '85px', height: '23px' }} 
+                <button
+                  className="classic-btn"
+                  style={{ minWidth: '85px', height: '23px' }}
                   onClick={closeImageEditModal}
                 >
                   Hủy bỏ
@@ -4747,7 +4841,7 @@ function App() {
           {(printJob ? printJob.notes : posNotes) && <div><strong>Ghi chú:</strong> {printJob ? printJob.notes : posNotes}</div>}
         </div>
         <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
-        
+
         <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse', margin: '4px 0' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #000', textAlign: 'left' }}>
@@ -4800,7 +4894,7 @@ function App() {
             )}
           </tbody>
         </table>
-        
+
         <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
         <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '3px', margin: '4px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
