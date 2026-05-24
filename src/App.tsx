@@ -1115,8 +1115,8 @@ function App() {
       return;
     }
     try {
-      const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000);
-      const res = await tauriInvoke("print_bill_network", { ip: labelNetworkPrinterIp, payload: testPayload });
+      const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000, "TEST1234", 2);
+      const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(testPayload) });
       alert("Lệnh in tem thử đã được gửi: " + res);
     } catch (err: any) {
       alert("Lỗi in thử tem: " + err.toString());
