@@ -11,7 +11,7 @@ struct DbState {
 
 fn to_base64(bytes: &[u8]) -> String {
     const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut buf = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    let mut buf = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let n = match chunk.len() {
             3 => ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32),
@@ -489,12 +489,10 @@ async fn save_customer_db(
 
         if let Some(id) = found_id {
             loai_kh_id = id;
-        } else {
-            if let Ok(query_loai2) = client.query("SELECT TOP 1 IDLoaiKH FROM LoaiKhachHang ORDER BY IDLoaiKH ASC", &[]).await {
-                if let Ok(Some(r2)) = query_loai2.into_row().await {
-                    if let Some(id2) = r2.get("IDLoaiKH") {
-                        loai_kh_id = id2;
-                    }
+        } else if let Ok(query_loai2) = client.query("SELECT TOP 1 IDLoaiKH FROM LoaiKhachHang ORDER BY IDLoaiKH ASC", &[]).await {
+            if let Ok(Some(r2)) = query_loai2.into_row().await {
+                if let Some(id2) = r2.get("IDLoaiKH") {
+                    loai_kh_id = id2;
                 }
             }
         }
@@ -1161,11 +1159,9 @@ async fn scan_network_printers(custom_ip: Option<String>, custom_port: Option<St
     for task in tasks {
         if SCAN_CANCELLED.load(Ordering::SeqCst) {
             task.abort();
-        } else {
-            if let Ok(Some(label)) = task.await {
-                if !printers.contains(&label) {
-                    printers.push(label);
-                }
+        } else if let Ok(Some(label)) = task.await {
+            if !printers.contains(&label) {
+                printers.push(label);
             }
         }
     }
@@ -1307,7 +1303,7 @@ async fn get_usb_printers() -> Result<Vec<String>, String> {
     #[cfg(target_os = "windows")]
     {
         let output = std::process::Command::new("powershell")
-            .args(&["-Command", "Get-Printer | Select-Object -ExpandProperty Name"])
+            .args(["-Command", "Get-Printer | Select-Object -ExpandProperty Name"])
             .output()
             .map_err(|e| e.to_string())?;
         
