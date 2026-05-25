@@ -72,3 +72,11 @@ export const isRetailCustomer = (name: string): boolean => {
   return nameLower.includes("khach le") || nameLower.includes("khach hang le");
 };
 
+export const getDisplayImageLink = (url: string | undefined): string => {
+  if (!url) return "";
+  const match = url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+  }
+  return url;
+};

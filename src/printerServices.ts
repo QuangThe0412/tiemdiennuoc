@@ -90,7 +90,7 @@ export const formatReceiptForNetworkPrinter = (
 };
 
 export const getLabelPreviewText = (productName: string, price: number, shopName: string, sku?: string): string => {
-  const cleanName = removeVietnameseTones(productName).toUpperCase();
+  const cleanName = removeVietnameseTones(productName).toUpperCase().substring(0, 18);
   const cleanShop = removeVietnameseTones(shopName).toUpperCase();
   const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
   const priceStr = price.toLocaleString("vi-VN") + " VND";
@@ -113,8 +113,8 @@ export const getLabelPreviewText = (productName: string, price: number, shopName
 };
 
 export const formatLabelForNetworkPrinter = (productName: string, price: number, shopName: string, sku?: string, quantity: number = 1): Uint8Array => {
-  const cleanName = removeVietnameseTones(productName).toUpperCase();
-  const cleanShop = removeVietnameseTones(shopName).toUpperCase();
+  const cleanName = removeVietnameseTones(productName).toUpperCase().substring(0, 18);
+  const cleanShop = removeVietnameseTones(shopName).toUpperCase().substring(0, 18);
   const safeSku = sku && sku.trim() !== "" ? sku.trim() : "12345678";
   const priceStr = price.toLocaleString("vi-VN") + " VND";
 

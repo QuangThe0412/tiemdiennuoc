@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Product, CartItem } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
-import { removeAccents, formatVND, getFormattedDate, getFormattedTime, isRetailCustomer } from './utils';
+import { removeAccents, formatVND, getFormattedDate, getFormattedTime, isRetailCustomer, getDisplayImageLink } from './utils';
 import { formatReceiptForNetworkPrinter, getLabelPreviewText, formatLabelForNetworkPrinter } from './printerServices';
 
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
@@ -158,6 +158,8 @@ function App() {
   const [isDraggingInvWidth, setIsDraggingInvWidth] = useState(false);
   const dragStartInvX = useRef(0);
   const dragStartInvWidth = useRef(580);
+  const barcodeBuffer = useRef("");
+  const lastBarcodeKeyTime = useRef(0);
 
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
@@ -279,6 +281,9 @@ function App() {
   const [scanningTarget, setScanningTarget] = useState<'receipt' | 'label' | null>(null);
   const [lastScanTarget, setLastScanTarget] = useState<'receipt' | 'label' | null>(null);
   const [scannedPrinters, setScannedPrinters] = useState<string[]>([]);
+  const [customScanIp, setCustomScanIp] = useState("");
+  const [customScanPort, setCustomScanPort] = useState("");
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
 
   const [isLabelPrintModalOpen, setIsLabelPrintModalOpen] = useState(false);
   const [labelPrintProduct, setLabelPrintProduct] = useState<any>(null);
@@ -470,6 +475,40 @@ function App() {
       }
 
       if (activeTab === 'pos') {
+        const now = Date.now();
+        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+          if (now - lastBarcodeKeyTime.current > 50) {
+            barcodeBuffer.current = "";
+          }
+          barcodeBuffer.current += e.key;
+          lastBarcodeKeyTime.current = now;
+        } else if (e.key === 'Enter' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+          if (now - lastBarcodeKeyTime.current < 50 && barcodeBuffer.current.length >= 1) {
+            const testSku = barcodeBuffer.current;
+            barcodeBuffer.current = "";
+            const foundProduct = products.find(p => p.sku && p.sku.trim() !== "" && p.sku.trim().toLowerCase() === testSku.trim().toLowerCase());
+            if (foundProduct) {
+              setCart(prev => {
+                const existingIdx = prev.findIndex(item => item.product.id === foundProduct.id);
+                if (existingIdx >= 0) {
+                  const newCart = [...prev];
+                  newCart[existingIdx].quantity += 1;
+                  return newCart;
+                }
+                return [...prev, { product: foundProduct, quantity: 1, discount: 0 }];
+              });
+              setPosSearch("");
+            } else {
+              showAlert(`Không tìm thấy sản phẩm với mã vạch: ${testSku}`, "Lỗi quét mã", "error");
+            }
+            e.preventDefault();
+            return;
+          }
+          barcodeBuffer.current = "";
+        } else if (e.key !== 'Shift') {
+          barcodeBuffer.current = "";
+        }
+
         if (e.key === 'F1') {
           e.preventDefault();
           handleSaveTemporary();
@@ -494,7 +533,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, customConfirm, productToDelete, imageEditProduct]);
+  }, [activeTab, selectedCartIndex, editingProduct, isSystemModalOpen, isCustomerModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isPendingModalOpen, isCheckoutModalOpen, cart, invoiceNo, selectedCustomer, posNotes, customers, customAlert, customConfirm, productToDelete, imageEditProduct, products, showAlert]);
   const loadDataFromMSSQL = async (serverVal = mssqlServer, dbVal = mssqlDbName, userVal = mssqlUser, passVal = mssqlPass) => {
     if (!serverVal || !userVal) {
       setProducts([]);
@@ -648,13 +687,18 @@ function App() {
 
   const printLabelViaNetwork = async (productName: string, price: number, quantity: number, sku?: string) => {
     if (!labelNetworkPrinterIp) {
-      alert("Chưa cấu hình địa chỉ IP máy in tem mạng! Hãy vào mục Cài đặt để thiết lập.");
+      alert(labelPrintMethod === "usb" ? "Chưa cấu hình tên máy in tem USB! Hãy vào mục Cài đặt để thiết lập." : "Chưa cấu hình địa chỉ IP máy in tem mạng! Hãy vào mục Cài đặt để thiết lập.");
       return;
     }
     try {
       const payload = formatLabelForNetworkPrinter(productName, price, shopName, sku, quantity);
-      const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(payload) });
-      console.log("Kết quả in tem mạng:", res);
+      if (labelPrintMethod === "usb") {
+        const res = await tauriInvoke("print_raw_usb", { printerName: labelNetworkPrinterIp, payload: Array.from(payload) });
+        console.log("Kết quả in tem USB:", res);
+      } else {
+        const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(payload) });
+        console.log("Kết quả in tem mạng:", res);
+      }
       alert(`Đã gửi lệnh in ${quantity} tem thành công!`);
     } catch (err: any) {
       alert("Lỗi kết nối hoặc gửi lệnh tới máy in tem: " + err.toString());
@@ -801,6 +845,8 @@ function App() {
         const sNetworkPrinterIp = settings.networkPrinterIp || "";
         const sLabelPrintMethod = settings.labelPrintMethod || "browser";
         const sLabelNetworkPrinterIp = settings.labelNetworkPrinterIp || "";
+        const sCustomScanIp = settings.customScanIp || "";
+        const sCustomScanPort = settings.customScanPort || "";
 
         if (sServer) setMssqlServer(sServer);
         if (sDb) setMssqlDbName(sDb);
@@ -816,6 +862,8 @@ function App() {
         setNetworkPrinterIp(sNetworkPrinterIp);
         setLabelPrintMethod(sLabelPrintMethod);
         setLabelNetworkPrinterIp(sLabelNetworkPrinterIp);
+        setCustomScanIp(sCustomScanIp);
+        setCustomScanPort(sCustomScanPort);
 
         await loadDataFromMSSQL(sServer, sDb, sUser, sPass);
       } catch (err) {
@@ -849,14 +897,21 @@ function App() {
     setScanningTarget(target);
     setLastScanTarget(target);
     setScannedPrinters([]);
+    setIsScanModalOpen(true);
     try {
-      const result = await tauriInvoke("scan_network_printers") as string[];
-      setScannedPrinters(result);
-      if (result.length === 0) {
-        alert("Không tìm thấy máy in mạng nào đang hoạt động trên cổng 9100.");
+      if (target === 'receipt') {
+        let parsedIp: string | null = customScanIp.trim() || null;
+        let parsedPort: string | null = customScanPort.trim() || null;
+        const result = await tauriInvoke("scan_network_printers", { customIp: parsedIp, customPort: parsedPort }) as string[];
+        setScannedPrinters(result);
+      } else {
+        const result = await tauriInvoke("get_usb_printers") as string[];
+        setScannedPrinters(result);
       }
+      setIsScanModalOpen(true);
     } catch (err: any) {
       alert("Lỗi khi quét máy in: " + err.toString());
+      setIsScanModalOpen(false);
     } finally {
       setScanningTarget(null);
     }
@@ -896,13 +951,18 @@ function App() {
 
   const handleTestPrintLabelNetwork = async () => {
     if (!labelNetworkPrinterIp) {
-      alert("Vui lòng nhập IP máy in tem mạng trước!");
+      alert(labelPrintMethod === "usb" ? "Vui lòng nhập/chọn tên máy in tem USB trước!" : "Vui lòng nhập IP máy in tem mạng trước!");
       return;
     }
     try {
       const testPayload = formatLabelForNetworkPrinter("San pham tem thu (Test)", 99000, shopName, "TEST1234", 2);
-      const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(testPayload) });
-      alert("Lệnh in tem thử đã được gửi: " + res);
+      if (labelPrintMethod === "usb") {
+        const res = await tauriInvoke("print_raw_usb", { printerName: labelNetworkPrinterIp, payload: Array.from(testPayload) });
+        alert("Lệnh in tem thử USB đã được gửi: " + res);
+      } else {
+        const res = await tauriInvoke("print_raw_network", { ip: labelNetworkPrinterIp, payload: Array.from(testPayload) });
+        alert("Lệnh in tem thử mạng đã được gửi: " + res);
+      }
     } catch (err: any) {
       alert("Lỗi in thử tem: " + err.toString());
     }
@@ -925,14 +985,16 @@ function App() {
         printMethod,
         networkPrinterIp,
         labelPrintMethod,
-        labelNetworkPrinterIp
+        labelNetworkPrinterIp,
+        customScanIp,
+        customScanPort
       };
       await tauriInvoke("save_settings", { settings: JSON.stringify(settingsObj) });
       setZoom(tempZoom);
       setIsSystemModalOpen(false);
       setMssqlTestResult(null);
       await loadDataFromMSSQL(mssqlServer, mssqlDbName, mssqlUser, mssqlPass);
-      alert("Đã lưu cấu hình hệ thống thành công và đồng bộ dữ liệu CSDL!");
+      alert("Đã lưu thành công");
     } catch (err: any) {
       alert("Lỗi khi lưu cấu hình: " + err.toString());
     }
@@ -1416,51 +1478,7 @@ function App() {
     });
   };
 
-  const barcodeBuffer = useRef("");
-  const barcodeTimeout = useRef<any>(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Chỉ kích hoạt ở tab Bán hàng và khi không có Modal nào đang mở
-      if (activeTab !== "pos") return;
-      if (isSystemModalOpen || isCustomerModalOpen || isCheckoutModalOpen || isLabelPrintModalOpen || isPendingModalOpen || isPayDebtModalOpen || isAddDebtModalOpen || isUnitManagerOpen) return;
-
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key !== "Enter" && e.key.length !== 1) return;
-
-      if (e.key === "Enter") {
-        if (barcodeBuffer.current.length >= 3) {
-          const skuScanned = barcodeBuffer.current.trim();
-
-          const foundProduct = products.find(p => p.sku && p.sku.trim() !== "" && p.sku.trim().toLowerCase() === skuScanned.toLowerCase());
-
-          if (foundProduct) {
-            addToCart(foundProduct);
-            // Xóa thanh tìm kiếm nếu con trỏ đang nằm trong ô tìm kiếm
-            setPosSearch("");
-          } else {
-            showAlert(`Không tìm thấy sản phẩm với mã vạch: ${skuScanned}`, "Lỗi quét mã", "error");
-          }
-
-          if (e.target instanceof HTMLInputElement) {
-            e.preventDefault();
-          }
-        }
-        barcodeBuffer.current = "";
-        return;
-      }
-
-      barcodeBuffer.current += e.key;
-
-      if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
-      barcodeTimeout.current = setTimeout(() => {
-        barcodeBuffer.current = ""; // Nếu gõ phím bình thường (chậm) thì tự reset buffer
-      }, 50); // Scanner thường gõ cực nhanh (< 20ms)
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeTab, products, isSystemModalOpen, isCustomerModalOpen, isCheckoutModalOpen, isLabelPrintModalOpen, isPendingModalOpen, isPayDebtModalOpen, isAddDebtModalOpen, isUnitManagerOpen, showAlert]);
 
   // Memoized filtered lists — only recompute when dependencies change
   const posFilteredProducts = useMemo(() => {
@@ -2398,7 +2416,7 @@ function App() {
                   <div style={{ flex: 1, width: '100%', overflow: 'hidden', padding: '4px' }}>
                     {selectedProduct ? (
                       selectedProduct.link ? (
-                        <img src={selectedProduct.link} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />
+                        <img src={getDisplayImageLink(selectedProduct.link)} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={handleImageError} />
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                           <div className="default-image-placeholder" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
@@ -3148,11 +3166,18 @@ function App() {
 
       {/* Status Bar */}
       <div className="status-bar">
-        <div className="status-panel">User: admin</div>
-        <div className="status-panel">Ca: 1</div>
-        <div className="status-panel">Server: MSSQL_PREP (Chưa kết nối)</div>
-        <div className="status-panel" style={{ flex: 1 }}>hiện giờ không có khuyến mãi</div>
-        <div className="status-panel">{shopName} - 2026</div>
+        {scanningTarget !== null && (
+          <div 
+            className="status-panel" 
+            style={{ cursor: 'pointer', backgroundColor: '#e2f0d9', color: '#385723', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+            onClick={() => setIsScanModalOpen(true)}
+            title="Nhấp để mở lại cửa sổ trạng thái quét"
+          >
+            <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid #385723', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            🔍 Đang dò máy in...
+          </div>
+        )}
+        <div className="status-panel" style={{ flex: 1, textAlign: 'right' }}>{shopName} - 2026</div>
       </div>
 
       {editingProduct && editForm && (
@@ -3442,15 +3467,45 @@ function App() {
                               placeholder="Ví dụ: 192.168.1.100"
                             />
                           </div>
+                          <div className="form-row">
+                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP/Dải IP cần dò:</span>
+                            <input
+                              className="classic-input"
+                              style={{ flex: 1 }}
+                              value={customScanIp}
+                              onChange={e => setCustomScanIp(e.target.value)}
+                              placeholder="Ví dụ: 192.168.1.55 hoặc 192.168.1 (Tùy chọn)"
+                            />
+                          </div>
+                          <div className="form-row">
+                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>Port cần dò:</span>
+                            <input
+                              className="classic-input"
+                              style={{ flex: 1 }}
+                              value={customScanPort}
+                              onChange={e => setCustomScanPort(e.target.value)}
+                              placeholder="Ví dụ: 9100, 8080 (Tùy chọn)"
+                            />
+                          </div>
                           <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
-                            <button
-                              className="classic-btn"
-                              style={{ flex: 1, height: '22px' }}
-                              onClick={(e) => { e.preventDefault(); handleScanPrinters('receipt'); }}
-                              disabled={scanningTarget !== null}
-                            >
-                              {scanningTarget === 'receipt' ? "⏳ Đang quét mạng..." : "🔍 Dò tìm máy in tự động"}
-                            </button>
+                            {scanningTarget === 'receipt' ? (
+                              <button
+                                className="classic-btn"
+                                style={{ flex: 1, height: '22px', backgroundColor: 'var(--text-red)', color: '#fff', borderColor: 'var(--text-red)' }}
+                                onClick={async (e) => { e.preventDefault(); await tauriInvoke("cancel_printer_scan"); }}
+                              >
+                                ⏹️ Hủy quét mạng
+                              </button>
+                            ) : (
+                              <button
+                                className="classic-btn"
+                                style={{ flex: 1, height: '22px' }}
+                                onClick={(e) => { e.preventDefault(); handleScanPrinters('receipt'); }}
+                                disabled={scanningTarget !== null}
+                              >
+                                🔍 Dò tìm máy in tự động
+                              </button>
+                            )}
                             <button
                               className="classic-btn"
                               style={{ flex: 1, height: '22px' }}
@@ -3459,38 +3514,7 @@ function App() {
                               🖨️ In thử (Test)
                             </button>
                           </div>
-                          {lastScanTarget === 'receipt' && scannedPrinters.length > 0 && scanningTarget === null && (
-                            <div style={{
-                              marginTop: '4px',
-                              padding: '4px',
-                              border: '1px dashed var(--border-dark)',
-                              backgroundColor: '#f9f9f9',
-                              borderRadius: '2px',
-                              fontSize: '10px'
-                            }}>
-                              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn):</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {scannedPrinters.map(ip => (
-                                  <button
-                                    key={ip}
-                                    className="classic-btn"
-                                    style={{
-                                      padding: '1px 6px',
-                                      fontSize: '10px',
-                                      minWidth: 'auto',
-                                      height: '18px',
-                                      backgroundColor: networkPrinterIp === ip ? '#d1e7dd' : '#fff',
-                                      borderColor: networkPrinterIp === ip ? '#a3cfbb' : '#ccc',
-                                      color: '#000'
-                                    }}
-                                    onClick={(e) => { e.preventDefault(); setNetworkPrinterIp(ip); setScannedPrinters([]); }}
-                                  >
-                                    🖥️ {ip}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {/* (Inline scan results for receipt printer removed in favor of modal) */}
                         </>
                       )}
                     </fieldset>
@@ -3507,19 +3531,19 @@ function App() {
                           onChange={e => setLabelPrintMethod(e.target.value)}
                         >
                           <option value="browser">Không sử dụng / Chưa có</option>
-                          <option value="network">In qua máy in mạng (TCP/IP)</option>
+                          <option value="usb">In trực tiếp qua USB (Windows Spooler)</option>
                         </select>
                       </div>
-                      {labelPrintMethod === "network" && (
+                      {labelPrintMethod === "usb" && (
                         <>
                           <div className="form-row">
-                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>IP máy in tem:</span>
+                            <span className="form-label-fixed" style={{ minWidth: '100px' }}>Tên máy in USB:</span>
                             <input
                               className="classic-input"
                               style={{ flex: 1 }}
                               value={labelNetworkPrinterIp}
                               onChange={e => setLabelNetworkPrinterIp(e.target.value)}
-                              placeholder="Ví dụ: 192.168.1.101"
+                              placeholder="Ví dụ: Xprinter XP-350B"
                             />
                           </div>
                           <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
@@ -3529,7 +3553,7 @@ function App() {
                               onClick={(e) => { e.preventDefault(); handleScanPrinters('label'); }}
                               disabled={scanningTarget !== null}
                             >
-                              {scanningTarget === 'label' ? "⏳ Đang quét..." : "🔍 Dò tìm tự động"}
+                              🔍 Liệt kê máy in USB
                             </button>
                             <button
                               className="classic-btn"
@@ -3539,38 +3563,7 @@ function App() {
                               🖨️ In thử Tem
                             </button>
                           </div>
-                          {lastScanTarget === 'label' && scannedPrinters.length > 0 && scanningTarget === null && (
-                            <div style={{
-                              marginTop: '4px',
-                              padding: '4px',
-                              border: '1px dashed var(--border-dark)',
-                              backgroundColor: '#f9f9f9',
-                              borderRadius: '2px',
-                              fontSize: '10px'
-                            }}>
-                              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Máy in phát hiện trong mạng (Click để chọn làm Máy in Tem):</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {scannedPrinters.map(ip => (
-                                  <button
-                                    key={ip}
-                                    className="classic-btn"
-                                    style={{
-                                      padding: '1px 6px',
-                                      fontSize: '10px',
-                                      minWidth: 'auto',
-                                      height: '18px',
-                                      backgroundColor: labelNetworkPrinterIp === ip ? '#d1e7dd' : '#fff',
-                                      borderColor: labelNetworkPrinterIp === ip ? '#a3cfbb' : '#ccc',
-                                      color: '#000'
-                                    }}
-                                    onClick={(e) => { e.preventDefault(); setLabelNetworkPrinterIp(ip); setScannedPrinters([]); }}
-                                  >
-                                    🖥️ {ip}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {/* (Inline scan results for label printer removed in favor of modal) */}
                         </>
                       )}
                     </fieldset>
@@ -4707,6 +4700,84 @@ function App() {
           Cảm ơn Quý khách. Hẹn gặp lại!
         </div>
       </div>
+
+      {isScanModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="classic-dialog" style={{ width: '400px' }}>
+            <div className="dialog-title-bar">
+              <span className="dialog-title">
+                {scanningTarget ? "Đang dò tìm máy in..." : "Kết quả dò tìm máy in"}
+              </span>
+              {!scanningTarget && (
+                <button className="dialog-close-btn" style={{ color: '#fff' }} onClick={() => setIsScanModalOpen(false)}>✕</button>
+              )}
+            </div>
+            <div className="dialog-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {scanningTarget ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <div className="spinner" style={{ margin: '0 auto 15px auto', width: '30px', height: '30px', border: '3px solid #f3f3f3', borderTop: '3px solid var(--primary-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                  <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                  <div style={{ fontWeight: 'bold' }}>Đang quét mạng nội bộ... Vui lòng đợi.</div>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                    {lastScanTarget === 'receipt' ? (
+                      <>IP: {customScanIp || 'Toàn bộ'} | Port: {customScanPort || 'Mặc định'}</>
+                    ) : (
+                      <>Đang liệt kê máy in USB / Hệ thống...</>
+                    )}
+                  </div>
+                  <button 
+                    className="classic-btn" 
+                    style={{ marginTop: '20px', backgroundColor: 'var(--text-red)', color: '#fff', borderColor: 'var(--text-red)', width: '100%' }}
+                    onClick={async () => { await tauriInvoke("cancel_printer_scan"); setIsScanModalOpen(false); }}
+                  >
+                    ⏹️ Hủy quét
+                  </button>
+                  <button 
+                    className="classic-btn" 
+                    style={{ marginTop: '8px', width: '100%', backgroundColor: '#f0f0f0' }}
+                    onClick={() => setIsScanModalOpen(false)}
+                    title="Ẩn cửa sổ này để làm việc khác, quá trình quét vẫn sẽ chạy ngầm"
+                  >
+                    ⬇️ Ẩn xuống nền (Chạy ngầm)
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {scannedPrinters.length > 0 ? (
+                    <>
+                      <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Đã tìm thấy {scannedPrinters.length} máy in (Click để chọn):</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '5px' }}>
+                        {scannedPrinters.map(ip => (
+                          <button
+                            key={ip}
+                            className="classic-btn"
+                            style={{ padding: '8px', textAlign: 'left' }}
+                            onClick={() => {
+                              if (lastScanTarget === 'receipt') setNetworkPrinterIp(ip);
+                              else setLabelNetworkPrinterIp(ip);
+                              setIsScanModalOpen(false);
+                            }}
+                          >
+                            🖨️ {ip}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '15px', color: 'var(--text-red)', fontWeight: 'bold' }}>
+                      Không tìm thấy máy in nào. Vui lòng kiểm tra lại cấu hình mạng, IP, Port hoặc kết nối máy in.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '15px' }}>
+                    <button className="classic-btn" onClick={() => setIsScanModalOpen(false)}>Đóng</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

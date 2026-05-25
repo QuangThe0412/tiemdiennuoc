@@ -1071,45 +1071,101 @@ fn get_subnet_prefixes() -> Vec<String> {
 }
 
 #[tauri::command]
-async fn scan_network_printers() -> Result<Vec<String>, String> {
+async fn scan_network_printers(custom_ip: Option<String>, custom_port: Option<String>) -> Result<Vec<String>, String> {
     use std::net::SocketAddr;
     use tokio::net::TcpStream;
     use tokio::time::timeout;
     use std::time::Duration;
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use std::sync::atomic::Ordering;
 
-    // Common thermal printer ports: 9100 (standard RAW/JetDirect), 
-    // 515 (LPD), 6101 (some Epson/cheap models), 8080 (some variants)
-    let ports_to_scan: Vec<u16> = vec![9100, 515, 6101, 8080];
-    let subnets = get_subnet_prefixes();
+    // Reset cancellation state
+    SCAN_CANCELLED.store(false, Ordering::SeqCst);
+
+    let mut ports_to_scan: Vec<u16> = vec![9100, 515, 6101, 8080];
+    if let Some(port_str) = custom_port {
+        let p = port_str.trim();
+        if !p.is_empty() {
+            if let Ok(port) = p.parse::<u16>() {
+                ports_to_scan = vec![port];
+            }
+        }
+    }
+
+    let mut ips_to_scan = Vec::new();
+    
+    if let Some(ip_str) = custom_ip {
+        let ip_val = ip_str.trim().to_string();
+        if !ip_val.is_empty() {
+            // Is it a full IP?
+            if ip_val.matches('.').count() == 3 && ip_val.parse::<std::net::Ipv4Addr>().is_ok() {
+                ips_to_scan.push(ip_val);
+            } else {
+                // It's a subnet (e.g. 192.168.1)
+                let cleaned = ip_val.replace(".x", "").replace(".X", "").replace("*", "");
+                let subnet = cleaned.trim_end_matches('.').to_string();
+                if !subnet.is_empty() {
+                    for i in 1..=254 {
+                        ips_to_scan.push(format!("{}.{}", subnet, i));
+                    }
+                }
+            }
+        }
+    }
+    
+    // If no custom IP provided (or invalid), fallback to common subnets
+    if ips_to_scan.is_empty() {
+        let mut subnets_to_scan = get_subnet_prefixes();
+        let common_subnets = vec![
+            "192.168.1", "192.168.0", "192.168.2", "192.168.3",
+            "192.168.100", "192.168.31", "192.168.88", "192.168.15", "192.168.8"
+        ];
+        for s in common_subnets {
+            let s_str = s.to_string();
+            if !subnets_to_scan.contains(&s_str) {
+                subnets_to_scan.push(s_str);
+            }
+        }
+        for subnet in subnets_to_scan {
+            for i in 1..=254 {
+                ips_to_scan.push(format!("{}.{}", subnet, i));
+            }
+        }
+    }
+
+    let sem = Arc::new(Semaphore::new(120));
     let mut tasks = vec![];
 
-    for subnet in subnets {
-        for i in 1..=254 {
-            for &port in &ports_to_scan {
-                let ip = format!("{}.{}", subnet, i);
-                let addr_str = format!("{}:{}", ip, port);
-                let addr: SocketAddr = match addr_str.parse() {
-                    Ok(a) => a,
-                    Err(_) => continue,
-                };
-                let result_label = format!("{}:{}", ip, port);
+    for ip in ips_to_scan {
+        for &port in &ports_to_scan {
+            let addr_str = format!("{}:{}", ip, port);
+            let addr: SocketAddr = match addr_str.parse() {
+                Ok(a) => a,
+                Err(_) => continue,
+            };
+            let result_label = format!("{}:{}", ip, port);
+            let sem_clone = Arc::clone(&sem);
 
-                tasks.push(tokio::spawn(async move {
-                    // 1500ms timeout – more tolerant of WiFi/slow network printers
-                    match timeout(Duration::from_millis(1500), TcpStream::connect(&addr)).await {
-                        Ok(Ok(_stream)) => Some(result_label),
-                        _ => None,
-                    }
-                }));
-            }
+            tasks.push(tokio::spawn(async move {
+                let _permit = sem_clone.acquire().await.ok();
+                match timeout(Duration::from_millis(1500), TcpStream::connect(&addr)).await {
+                    Ok(Ok(_stream)) => Some(result_label),
+                    _ => None,
+                }
+            }));
         }
     }
 
     let mut printers = vec![];
     for task in tasks {
-        if let Ok(Some(label)) = task.await {
-            if !printers.contains(&label) {
-                printers.push(label);
+        if SCAN_CANCELLED.load(Ordering::SeqCst) {
+            task.abort();
+        } else {
+            if let Ok(Some(label)) = task.await {
+                if !printers.contains(&label) {
+                    printers.push(label);
+                }
             }
         }
     }
@@ -1192,6 +1248,153 @@ async fn print_raw_network(ip: String, payload: Vec<u8>) -> Result<String, Strin
     }
 }
 
+static SCAN_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+async fn cancel_printer_scan() -> Result<(), String> {
+    SCAN_CANCELLED.store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+#[repr(C)]
+struct DOC_INFO_1_W {
+    p_doc_name: *const u16,
+    p_output_file: *const u16,
+    p_datatype: *const u16,
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "winspool")]
+extern "system" {
+    fn OpenPrinterW(
+        pPrinterName: *const u16,
+        phPrinter: *mut isize,
+        pDefault: *mut std::ffi::c_void,
+    ) -> i32;
+
+    fn ClosePrinter(
+        hPrinter: isize,
+    ) -> i32;
+
+    fn StartDocPrinterW(
+        hPrinter: isize,
+        Level: u32,
+        pDocInfo: *const DOC_INFO_1_W,
+    ) -> u32;
+
+    fn EndDocPrinter(
+        hPrinter: isize,
+    ) -> i32;
+
+    fn StartPagePrinter(
+        hPrinter: isize,
+    ) -> i32;
+
+    fn EndPagePrinter(
+        hPrinter: isize,
+    ) -> i32;
+
+    fn WritePrinter(
+        hPrinter: isize,
+        pBuf: *const u8,
+        cbBuf: u32,
+        pcWritten: *mut u32,
+    ) -> i32;
+}
+
+#[tauri::command]
+async fn get_usb_printers() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("powershell")
+            .args(&["-Command", "Get-Printer | Select-Object -ExpandProperty Name"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let printers: Vec<String> = stdout
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+            
+        Ok(printers)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(vec![])
+    }
+}
+
+#[tauri::command]
+async fn print_raw_usb(printer_name: String, payload: Vec<u8>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        
+        let printer_name_wide: Vec<u16> = std::ffi::OsStr::new(&printer_name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+            
+        let doc_name_wide: Vec<u16> = std::ffi::OsStr::new("POS-Label-Job")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+            
+        let datatype_wide: Vec<u16> = std::ffi::OsStr::new("RAW")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        unsafe {
+            let mut h_printer: isize = 0;
+            if OpenPrinterW(printer_name_wide.as_ptr(), &mut h_printer, std::ptr::null_mut()) == 0 {
+                return Err("Không thể kết nối tới máy in USB (OpenPrinterW failed)".to_string());
+            }
+
+            let doc_info = DOC_INFO_1_W {
+                p_doc_name: doc_name_wide.as_ptr(),
+                p_output_file: std::ptr::null(),
+                p_datatype: datatype_wide.as_ptr(),
+            };
+
+            let job_id = StartDocPrinterW(h_printer, 1, &doc_info);
+            if job_id == 0 {
+                ClosePrinter(h_printer);
+                return Err("Không thể tạo phiên in (StartDocPrinterW failed)".to_string());
+            }
+
+            if StartPagePrinter(h_printer) == 0 {
+                EndDocPrinter(h_printer);
+                ClosePrinter(h_printer);
+                return Err("Không thể bắt đầu trang in (StartPagePrinter failed)".to_string());
+            }
+
+            let mut written: u32 = 0;
+            let write_res = WritePrinter(
+                h_printer,
+                payload.as_ptr(),
+                payload.len() as u32,
+                &mut written,
+            );
+
+            EndPagePrinter(h_printer);
+            EndDocPrinter(h_printer);
+            ClosePrinter(h_printer);
+
+            if write_res == 0 {
+                return Err("Không thể gửi dữ liệu tới máy in (WritePrinter failed)".to_string());
+            }
+        }
+        Ok("Đã gửi lệnh in raw qua USB thành công!".to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("In raw qua USB chỉ hỗ trợ trên Windows!".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1223,7 +1426,10 @@ pub fn run() {
             delete_drive_image_rust,
             scan_network_printers,
             print_bill_network,
-            print_raw_network
+            print_raw_network,
+            cancel_printer_scan,
+            get_usb_printers,
+            print_raw_usb
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
